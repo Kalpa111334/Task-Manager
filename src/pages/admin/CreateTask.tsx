@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../../components/Layout';
 import { supabase } from '../../lib/supabase';
-import { User } from '../../types';
+import { User } from '../../types/index';
 import toast from 'react-hot-toast';
 import { formatCurrency } from '../../utils/currency';
 import { CurrencyDollarIcon } from '@heroicons/react/outline';

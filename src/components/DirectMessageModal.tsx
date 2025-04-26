@@ -17,23 +17,22 @@ export default function DirectMessageModal({ isOpen, onClose, recipient }: Direc
 
   if (!isOpen || !recipient) return null;
 
-  async function handleSubmit(e: React.FormEvent) {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!message.trim()) return;
-
-    setSending(true);
+    if (!recipient) return;
+    
     try {
+      setSending(true);
       const { error } = await supabase.from('messages').insert({
-        content: message.trim(),
         sender_id: user?.id,
         recipient_id: recipient.id,
-        created_at: new Date().toISOString()
+        content: message,
+        sent_at: new Date().toISOString()
       });
 
       if (error) throw error;
-
+      
       toast.success('Message sent successfully');
-      setMessage('');
       onClose();
     } catch (error) {
       console.error('Error sending message:', error);
@@ -41,7 +40,7 @@ export default function DirectMessageModal({ isOpen, onClose, recipient }: Direc
     } finally {
       setSending(false);
     }
-  }
+  };
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">

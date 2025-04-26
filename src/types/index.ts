@@ -12,19 +12,17 @@ export interface Task {
   id: string;
   title: string;
   description: string;
-  priority: 'High' | 'Medium' | 'Low';
   status: 'Not Started' | 'In Progress' | 'Paused' | 'Completed';
-  assigned_to: string | null;
-  created_by: string;
-  estimated_time: number;
+  priority: 'High' | 'Medium' | 'Low';
+  assigned_to?: string;
   price: number;
   due_date: string;
   created_at: string;
-  updated_at: string;
-  started_at?: string | null;
-  completed_at?: string | null;
+  started_at?: string;
+  completed_at?: string;
+  actual_time?: number;
+  last_pause_at?: string;
   total_pause_duration?: number;
-  last_pause_at?: string | null;
 }
 
 export interface TaskProof {

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Layout from '../../components/Layout';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import { Task } from '../../types';
+import { Task } from '../../types/index';
 import { formatCurrency } from '../../utils/currency';
 import {
   ClockIcon,

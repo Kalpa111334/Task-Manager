@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Layout from '../../components/Layout';
 import { supabase } from '../../lib/supabase';
-import { Task, User } from '../../types';
+import { Task, User } from '../../types/index';
 import {
   Chart as ChartJS,
   CategoryScale,

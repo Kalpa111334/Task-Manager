@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../../components/Layout';
 import TaskProofView from '../../components/TaskProofView';
 import { supabase } from '../../lib/supabase';
-import { Task, User } from '../../types';
+import { Task, User } from '../../types/index';
 import { ArrowLeftIcon, PhotographIcon } from '@heroicons/react/outline';
 import toast from 'react-hot-toast';
 import { formatCurrency } from '../../utils/currency';

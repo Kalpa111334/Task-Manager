@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { supabase } from '../lib/supabase';
-import { User } from '../types';
+import { User } from '../types/index';
 import { formatCurrency, parseCurrencyInput } from '../utils/currency';
 
 interface TaskFormProps {

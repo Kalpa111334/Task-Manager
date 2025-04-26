@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import Layout from '../../components/Layout';
 import { supabase } from '../../lib/supabase';
-import { Task, User } from '../../types';
+import { Task, User } from '../../types/index';
 import { formatCurrency } from '../../utils/currency';
 import toast from 'react-hot-toast';
 import {
@@ -148,7 +148,7 @@ export default function TaskPool() {
                           <div className="mt-2 flex items-center space-x-4 text-sm text-gray-500">
                             <div className="flex items-center">
                               <ClockIcon className="h-4 w-4 mr-1" />
-                              {task.estimated_time}h
+                              {task.actual_time || 0}h
                             </div>
                             <div className="flex items-center">
                               <CurrencyDollarIcon className="h-4 w-4 mr-1" />

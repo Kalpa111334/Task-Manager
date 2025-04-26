@@ -2,7 +2,7 @@ import React from 'react';
 import { useState, useEffect } from 'react';
 import Layout from '../../components/Layout';
 import { supabase } from '../../lib/supabase';
-import { Task } from '../../types';
+import { Task } from '../../types/index';
 import {
   ChartBarIcon,
   UserGroupIcon,
