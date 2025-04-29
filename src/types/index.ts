@@ -23,6 +23,8 @@ export interface Task {
   actual_time?: number;
   last_pause_at?: string;
   total_pause_duration?: number;
+  hasApprovedProof?: boolean;
+  task_proofs?: TaskProof[];
 }
 
 export interface TaskProof {

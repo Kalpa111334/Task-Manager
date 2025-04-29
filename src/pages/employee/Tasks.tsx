@@ -14,6 +14,7 @@ import {
   CurrencyDollarIcon,
   CalendarIcon,
   PhotographIcon,
+  CheckCircleIcon
 } from '@heroicons/react/outline';
 
 export default function Tasks() {
@@ -32,12 +33,19 @@ export default function Tasks() {
     try {
       const { data, error } = await supabase
         .from('tasks')
-        .select('*')
+        .select('*, task_proofs(status)')
         .eq('assigned_to', user?.id)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setTasks(data || []);
+      
+      // Process tasks to include proof status
+      const processedTasks = (data || []).map(task => ({
+        ...task,
+        hasApprovedProof: task.task_proofs?.some((proof: any) => proof.status === 'Approved')
+      }));
+      
+      setTasks(processedTasks);
     } catch (error) {
       console.error('Error fetching tasks:', error);
       toast.error('Failed to fetch tasks');
@@ -81,12 +89,15 @@ export default function Tasks() {
   };
 
   const filteredTasks = tasks.filter(task => {
-    if (filter === 'active') return task.status !== 'Completed';
-    if (filter === 'completed') return task.status === 'Completed';
+    if (filter === 'active') return task.status !== 'Completed' || !task.hasApprovedProof;
+    if (filter === 'completed') return task.status === 'Completed' && task.hasApprovedProof;
     return true;
   });
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: string, hasApprovedProof: boolean) => {
+    if (status === 'Completed' && hasApprovedProof) {
+      return 'bg-green-100 text-green-800';
+    }
     switch (status) {
       case 'Not Started':
         return 'bg-gray-100 text-gray-800';
@@ -95,10 +106,17 @@ export default function Tasks() {
       case 'Paused':
         return 'bg-yellow-100 text-yellow-800';
       case 'Completed':
-        return 'bg-green-100 text-green-800';
+        return 'bg-yellow-100 text-yellow-800'; // Pending approval
       default:
         return 'bg-gray-100 text-gray-800';
     }
+  };
+
+  const getStatusText = (status: string, hasApprovedProof: boolean) => {
+    if (status === 'Completed') {
+      return hasApprovedProof ? 'Completed' : 'Pending Approval';
+    }
+    return status;
   };
 
   return (
@@ -187,12 +205,18 @@ export default function Tasks() {
                     <div className="flex items-center space-x-4">
                       <span
                         className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(
-                          task.status
+                          task.status,
+                          task.hasApprovedProof ?? false
                         )}`}
                       >
-                        {task.status}
+                        <span className="flex items-center">
+                          {task.status === 'Completed' && task.hasApprovedProof && (
+                            <CheckCircleIcon className="h-4 w-4 mr-1" />
+                          )}
+                          {getStatusText(task.status, task.hasApprovedProof ?? false)}
+                        </span>
                       </span>
-                      {task.status !== 'Completed' && (
+                      {(!task.hasApprovedProof && task.status !== 'Completed') && (
                         <div className="flex space-x-2">
                           {task.status !== 'In Progress' && (
                             <button
