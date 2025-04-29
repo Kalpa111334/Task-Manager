@@ -1,7 +1,7 @@
 import React, { Fragment, useState } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
 import { XIcon } from '@heroicons/react/outline';
-import { Task } from '../types';
+import type { Task } from '../types/index';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import TaskSubmissionWithProof from './TaskSubmissionWithProof';
