@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { CameraIcon, PhotographIcon, XIcon } from '@heroicons/react/outline';
+import React, { useState, useRef } from 'react';
+import { CameraIcon, PhotographIcon, XIcon, UploadIcon } from '@heroicons/react/outline';
 import CameraCapture from './CameraCapture';
 import { ResponsiveCard } from './ui/ResponsiveComponents';
 
@@ -19,17 +19,47 @@ export default function TaskSubmissionWithProof({
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleCapture = (imageData: string) => {
     setProofPhoto(imageData);
     setShowCamera(false);
+    setError(null);
+  };
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Check file type
+    if (!file.type.startsWith('image/')) {
+      setError('Please upload an image file (JPEG, PNG, etc.)');
+      return;
+    }
+
+    // Check file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Image size should be less than 5MB');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const imageData = e.target?.result as string;
+      setProofPhoto(imageData);
+      setError(null);
+    };
+    reader.onerror = () => {
+      setError('Failed to read the image file. Please try again.');
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!proofPhoto) {
-      setError('Please take a photo as proof of completion');
+      setError('Please provide a photo proof of completion');
       return;
     }
 
@@ -92,14 +122,33 @@ export default function TaskSubmissionWithProof({
               </button>
             </div>
           ) : (
-            <button
-              type="button"
-              onClick={() => setShowCamera(true)}
-              className="w-full h-48 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center gap-2 text-gray-600 hover:border-indigo-500 hover:text-indigo-500 touch-manipulation"
-            >
-              <CameraIcon className="h-8 w-8" />
-              <span className="text-sm font-medium">Take Photo</span>
-            </button>
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                type="button"
+                onClick={() => setShowCamera(true)}
+                className="h-48 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center gap-2 text-gray-600 hover:border-indigo-500 hover:text-indigo-500 hover:bg-indigo-50 transition-colors touch-manipulation"
+              >
+                <CameraIcon className="h-8 w-8" />
+                <span className="text-sm font-medium">Take Photo</span>
+              </button>
+
+              <div 
+                className="h-48 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center gap-2 text-gray-600 hover:border-indigo-500 hover:text-indigo-500 hover:bg-indigo-50 transition-colors cursor-pointer"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <UploadIcon className="h-8 w-8" />
+                <span className="text-sm font-medium">Upload Image</span>
+                <p className="text-xs text-gray-500">JPG, PNG (max 5MB)</p>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                  aria-label="Upload image"
+                />
+              </div>
+            </div>
           )}
         </div>
 
@@ -119,7 +168,16 @@ export default function TaskSubmissionWithProof({
         </div>
 
         {error && (
-          <div className="text-red-600 text-sm">{error}</div>
+          <div className="rounded-md bg-red-50 p-4">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <XIcon className="h-5 w-5 text-red-400" aria-hidden="true" />
+              </div>
+              <div className="ml-3">
+                <p className="text-sm font-medium text-red-800">{error}</p>
+              </div>
+            </div>
+          </div>
         )}
 
         <div className="flex gap-3 pt-2">

@@ -9,20 +9,55 @@ interface CameraCaptureProps {
 export default function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string>('');
 
   const startCamera = useCallback(async () => {
     try {
+      // First, try to get the environment-facing camera (back camera)
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' }, // Use back camera on mobile
+        video: { 
+          facingMode: 'environment',
+          width: { ideal: 1920 },
+          height: { ideal: 1080 }
+        },
         audio: false
+      }).catch(async () => {
+        // If environment camera fails, try user-facing camera (front camera)
+        return await navigator.mediaDevices.getUserMedia({
+          video: { 
+            facingMode: 'user',
+            width: { ideal: 1920 },
+            height: { ideal: 1080 }
+          },
+          audio: false
+        });
       });
       
       if (videoRef.current) {
+        streamRef.current = stream;
         videoRef.current.srcObject = stream;
-        setIsStreaming(true);
-        setError('');
+        
+        // Wait for the video to be ready
+        await new Promise<void>((resolve) => {
+          if (videoRef.current) {
+            videoRef.current.onloadedmetadata = () => {
+              if (videoRef.current) {
+                videoRef.current.play()
+                  .then(() => {
+                    setIsStreaming(true);
+                    setError('');
+                    resolve();
+                  })
+                  .catch((err) => {
+                    setError('Failed to start video stream. Please try again.');
+                    console.error('Video play error:', err);
+                  });
+              }
+            };
+          }
+        });
       }
     } catch (err) {
       setError('Unable to access camera. Please make sure you have granted camera permissions.');
@@ -31,11 +66,11 @@ export default function CameraCapture({ onCapture, onClose }: CameraCaptureProps
   }, []);
 
   const stopCamera = useCallback(() => {
-    if (videoRef.current?.srcObject) {
-      const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
-      tracks.forEach(track => track.stop());
-      setIsStreaming(false);
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
     }
+    setIsStreaming(false);
   }, []);
 
   const capturePhoto = useCallback(() => {
@@ -50,6 +85,12 @@ export default function CameraCapture({ onCapture, onClose }: CameraCaptureProps
       // Draw the current video frame on the canvas
       const context = canvas.getContext('2d');
       if (context) {
+        // Flip the image horizontally if using front camera
+        if (streamRef.current?.getVideoTracks()[0].getSettings().facingMode === 'user') {
+          context.translate(canvas.width, 0);
+          context.scale(-1, 1);
+        }
+        
         context.drawImage(video, 0, 0, canvas.width, canvas.height);
         
         // Convert canvas to base64 image data
@@ -73,7 +114,10 @@ export default function CameraCapture({ onCapture, onClose }: CameraCaptureProps
       {/* Header */}
       <div className="relative safe-top bg-black px-4 py-3 flex items-center justify-between">
         <button
-          onClick={onClose}
+          onClick={() => {
+            stopCamera();
+            onClose();
+          }}
           className="text-white p-2 rounded-lg hover:bg-gray-800 touch-manipulation"
           aria-label="Close camera"
         >
@@ -95,7 +139,13 @@ export default function CameraCapture({ onCapture, onClose }: CameraCaptureProps
               ref={videoRef}
               autoPlay
               playsInline
+              muted
               className="h-full w-full object-cover"
+              style={{
+                transform: streamRef.current?.getVideoTracks()[0].getSettings().facingMode === 'user' 
+                  ? 'scaleX(-1)' 
+                  : 'none'
+              }}
             />
             <canvas ref={canvasRef} className="hidden" />
           </>

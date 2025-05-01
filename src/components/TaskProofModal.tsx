@@ -5,6 +5,7 @@ import type { Task } from '../types/index';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import TaskSubmissionWithProof from './TaskSubmissionWithProof';
+import { useAuth } from '../contexts/AuthContext';
 
 interface TaskProofModalProps {
   isOpen: boolean;
@@ -20,9 +21,14 @@ export default function TaskProofModal({
   onProofSubmitted
 }: TaskProofModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { user } = useAuth();
 
   const handleSubmit = async (data: { taskId: string; proofPhoto: string; notes: string }) => {
     try {
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+
       setIsSubmitting(true);
 
       // Upload the photo proof to storage
@@ -47,7 +53,21 @@ export default function TaskProofModal({
 
       const now = new Date().toISOString();
 
-      // Update task status and add proof details
+      // Create task proof entry
+      const { error: proofError } = await supabase
+        .from('task_proofs')
+        .insert({
+          task_id: task.id,
+          image_url: publicUrlData.publicUrl,
+          description: data.notes,
+          submitted_by: user.id,
+          created_at: now,
+          status: 'Pending'
+        });
+
+      if (proofError) throw proofError;
+
+      // Update task status
       const { error: updateError } = await supabase
         .from('tasks')
         .update({
