@@ -127,7 +127,8 @@ export default function Tasks() {
       const task = tasks.find(t => t.id === data.taskId);
       
       if (task) {
-        const updates = {
+        type TaskUpdate = Partial<Task> & { updated_at: string };
+        const updates: TaskUpdate = {
           status: 'Completed',
           completed_at: now,
           updated_at: now
@@ -181,7 +182,7 @@ export default function Tasks() {
     return true;
   });
 
-  const getStatusColor = (status: string, hasApprovedProof: boolean) => {
+  const getStatusColor = (status: string, hasApprovedProof: boolean | undefined) => {
     if (status === 'Completed' && hasApprovedProof) {
       return 'bg-green-100 text-green-800';
     }
@@ -199,7 +200,7 @@ export default function Tasks() {
     }
   };
 
-  const getStatusText = (status: string, hasApprovedProof: boolean) => {
+  const getStatusText = (status: string, hasApprovedProof: boolean | undefined) => {
     if (status === 'Completed') {
       return hasApprovedProof ? 'Completed' : 'Pending Approval';
     }
