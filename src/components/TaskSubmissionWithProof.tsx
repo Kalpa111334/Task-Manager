@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { CameraIcon, PhotographIcon, XIcon, UploadIcon } from '@heroicons/react/outline';
+import { CameraIcon, XIcon, UploadIcon } from '@heroicons/react/outline';
 import CameraCapture from './CameraCapture';
 import { ResponsiveCard } from './ui/ResponsiveComponents';
 
@@ -106,34 +106,45 @@ export default function TaskSubmissionWithProof({
           </label>
           
           {proofPhoto ? (
-            <div className="relative">
+            <div className="relative rounded-lg overflow-hidden">
               <img
                 src={proofPhoto}
                 alt="Task completion proof"
-                className="w-full h-48 object-cover rounded-lg"
+                className="w-full h-48 sm:h-64 object-cover"
               />
-              <button
-                type="button"
-                onClick={() => setProofPhoto(null)}
-                className="absolute top-2 right-2 p-1 bg-black bg-opacity-50 rounded-full text-white hover:bg-opacity-75 touch-manipulation"
-                aria-label="Remove photo"
-              >
-                <XIcon className="h-5 w-5" />
-              </button>
+              <div className="absolute inset-0 bg-black bg-opacity-40 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center space-x-4">
+                <button
+                  type="button"
+                  onClick={() => setShowCamera(true)}
+                  className="p-2 bg-white rounded-full text-gray-900 hover:bg-gray-100 touch-manipulation transform active:scale-95 transition-all"
+                  aria-label="Retake photo"
+                >
+                  <CameraIcon className="h-5 w-5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setProofPhoto(null)}
+                  className="p-2 bg-white rounded-full text-gray-900 hover:bg-gray-100 touch-manipulation transform active:scale-95 transition-all"
+                  aria-label="Remove photo"
+                >
+                  <XIcon className="h-5 w-5" />
+                </button>
+              </div>
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <button
                 type="button"
                 onClick={() => setShowCamera(true)}
-                className="h-48 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center gap-2 text-gray-600 hover:border-indigo-500 hover:text-indigo-500 hover:bg-indigo-50 transition-colors touch-manipulation"
+                className="h-48 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center gap-2 text-gray-600 hover:border-indigo-500 hover:text-indigo-500 hover:bg-indigo-50 transition-colors touch-manipulation transform active:scale-98 transition-transform"
               >
                 <CameraIcon className="h-8 w-8" />
                 <span className="text-sm font-medium">Take Photo</span>
+                <span className="text-xs text-gray-500">Front/Back Camera</span>
               </button>
 
               <div 
-                className="h-48 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center gap-2 text-gray-600 hover:border-indigo-500 hover:text-indigo-500 hover:bg-indigo-50 transition-colors cursor-pointer"
+                className="h-48 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center gap-2 text-gray-600 hover:border-indigo-500 hover:text-indigo-500 hover:bg-indigo-50 transition-colors cursor-pointer touch-manipulation transform active:scale-98 transition-transform"
                 onClick={() => fileInputRef.current?.click()}
               >
                 <UploadIcon className="h-8 w-8" />
@@ -143,6 +154,7 @@ export default function TaskSubmissionWithProof({
                   ref={fileInputRef}
                   type="file"
                   accept="image/*"
+                  capture="environment"
                   onChange={handleFileUpload}
                   className="hidden"
                   aria-label="Upload image"
@@ -180,18 +192,18 @@ export default function TaskSubmissionWithProof({
           </div>
         )}
 
-        <div className="flex gap-3 pt-2">
+        <div className="flex flex-col sm:flex-row gap-3 pt-2">
           <button
             type="button"
             onClick={onCancel}
-            className="flex-1 py-3 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 touch-manipulation"
+            className="w-full sm:flex-1 py-3 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 touch-manipulation transform active:scale-98 transition-transform"
             disabled={isSubmitting}
           >
             Cancel
           </button>
           <button
             type="submit"
-            className="flex-1 py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 touch-manipulation disabled:opacity-50"
+            className="w-full sm:flex-1 py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 touch-manipulation transform active:scale-98 transition-transform disabled:opacity-50"
             disabled={isSubmitting}
           >
             {isSubmitting ? 'Submitting...' : 'Submit Task'}

@@ -15,8 +15,10 @@
   "dependencies": {
     "@headlessui/react": "^1.7.17",
     "@heroicons/react": "^1.0.6",
+    "@react-google-maps/api": "^2.20.7",
     "@react-pdf/renderer": "^4.3.0",
     "@supabase/supabase-js": "^2.39.0",
+    "@types/google.maps": "^3.58.1",
     "chart.js": "^4.4.0",
     "date-fns": "^4.1.0",
     "framer-motion": "^12.9.2",

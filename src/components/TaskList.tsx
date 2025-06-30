@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import TaskCountdown from './TaskCountdown';
 import {
   CheckIcon,
   PauseIcon,
@@ -221,6 +222,9 @@ export default function TaskList({ isAdmin = false }: TaskListProps) {
                       <CalendarIcon className="flex-shrink-0 mr-1.5 h-5 w-5 text-gray-400" />
                       Due {format(new Date(task.due_date), 'MMM dd, yyyy')}
                     </p>
+                    <div className="mt-2 sm:mt-0 sm:ml-6">
+                      <TaskCountdown dueDate={task.due_date} status={task.status} />
+                    </div>
                   </div>
                   <div className="mt-2 flex items-center text-sm text-gray-500 sm:mt-0">
                     <ClockIcon className="flex-shrink-0 mr-1.5 h-5 w-5 text-gray-400" />

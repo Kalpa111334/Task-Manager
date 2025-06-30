@@ -11,6 +11,7 @@ import {
   ChartBarIcon,
 } from '@heroicons/react/outline';
 import { ResponsiveCard, ResponsiveGrid, StatCard } from '../../components/ui/ResponsiveComponents';
+import { LocationService } from '../../services/LocationService';
 
 export default function EmployeeDashboard() {
   const { user } = useAuth();
@@ -25,6 +26,11 @@ export default function EmployeeDashboard() {
   useEffect(() => {
     if (user) {
       fetchEmployeeStats();
+      LocationService.startTracking(user.id);
+
+      return () => {
+        LocationService.stopTracking();
+      };
     }
   }, [user]);
 
@@ -86,6 +92,18 @@ export default function EmployeeDashboard() {
       <div className="py-6">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <h1 className="text-2xl font-semibold text-gray-900 mb-6">Welcome, {user?.full_name}</h1>
+
+          <div className="bg-white rounded-lg shadow p-6 mb-6">
+            <h1 className="text-2xl font-bold text-gray-800 mb-4">Welcome, {user?.full_name}</h1>
+            <p className="text-gray-600">
+              Your location is being tracked for work purposes. This helps us ensure your safety and coordinate field work effectively.
+            </p>
+            <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+              <p className="text-sm text-blue-800">
+                📍 Location tracking is active. Your team can see your current location while you're on duty.
+              </p>
+            </div>
+          </div>
 
           <ResponsiveGrid cols={{ default: 1, sm: 2, lg: 4 }} gap={4}>
             <StatCard

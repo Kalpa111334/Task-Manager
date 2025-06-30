@@ -78,7 +78,10 @@ export default function Layout({ children }: LayoutProps) {
               <MenuIcon className="h-6 w-6" />
             )}
           </button>
+          <div className="flex items-center ml-2">
+            <img src="/Midiz.png" alt="MIDIZ Logo" className="h-8 w-8 object-contain" />
           <h1 className="ml-2 text-lg font-bold text-white">TaskVision</h1>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -104,8 +107,11 @@ export default function Layout({ children }: LayoutProps) {
       >
         <div className="flex flex-col h-full">
           {/* Logo - hidden on mobile */}
-          <div className="hidden lg:flex items-center justify-center h-16 bg-indigo-800 bg-opacity-40">
+          <div className="hidden lg:flex items-center justify-center h-24 bg-indigo-800 bg-opacity-40">
+            <div className="flex flex-col items-center">
+              <img src="/Midiz.png" alt="MIDIZ Logo" className="h-12 w-12 object-contain mb-2" />
             <h1 className="text-2xl font-bold text-white">TaskVision</h1>
+            </div>
           </div>
 
           {/* Navigation */}
@@ -171,6 +177,12 @@ export default function Layout({ children }: LayoutProps) {
             {/* Content area with glass effect */}
             <div className="bg-white bg-opacity-90 backdrop-filter backdrop-blur-lg rounded-lg shadow-lg p-3 sm:p-4 md:p-6">
               {children}
+            </div>
+            {/* Powered by MIDIZ slogan */}
+            <div className="mt-4 text-center">
+              <p className="text-sm text-gray-500 font-medium tracking-wider">
+                POWERED BY <span className="text-indigo-600 font-bold">MIDIZ</span>
+              </p>
             </div>
           </div>
         </main>

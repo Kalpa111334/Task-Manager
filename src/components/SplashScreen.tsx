@@ -1,66 +1,72 @@
 import React, { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
+import { Suspense } from 'react';
 
-export default function SplashScreen({ onComplete }: { onComplete: () => void }) {
-  const [isVisible, setIsVisible] = useState(true);
+interface SplashScreenProps {
+  onFinish: () => void;
+}
+
+export default function SplashScreen({ onFinish }: SplashScreenProps) {
+  const [fadeOut, setFadeOut] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setIsVisible(false);
-      onComplete();
-    }, 2500);
+    // Preload the logo image
+    const img = new Image();
+    img.src = '/Midiz.png';
+    img.onload = () => setImageLoaded(true);
 
-    return () => clearTimeout(timer);
-  }, [onComplete]);
+    // Start fade out after 1.5 seconds (reduced from 2.5)
+    const fadeTimer = setTimeout(() => {
+      setFadeOut(true);
+    }, 1500);
 
-  if (!isVisible) return null;
+    // Complete splash screen after fade out (2 seconds total, reduced from 3)
+    const finishTimer = setTimeout(() => {
+      onFinish();
+    }, 2000);
+
+    return () => {
+      clearTimeout(fadeTimer);
+      clearTimeout(finishTimer);
+    };
+  }, [onFinish]);
 
   return (
-    <motion.div
-      className="fixed inset-0 flex items-center justify-center bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-500 z-50"
-      initial={{ opacity: 1 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.5 }}
+    <div
+      className={`fixed inset-0 z-50 flex flex-col items-center justify-center bg-gradient-to-br from-indigo-600 via-indigo-700 to-indigo-800 transition-opacity duration-300 ${
+        fadeOut ? 'opacity-0' : 'opacity-100'
+      }`}
     >
-      <div className="text-center">
-        <motion.div
-          initial={{ scale: 0, rotate: -180 }}
-          animate={{ scale: 1, rotate: 0 }}
-          transition={{ duration: 0.8, type: "spring", bounce: 0.4 }}
-          className="mb-8"
-        >
-          <svg
-            className="w-24 h-24 mx-auto text-white"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
-            />
-          </svg>
-        </motion.div>
-        <motion.h1
-          initial={{ y: 20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.3, duration: 0.8 }}
-          className="text-4xl font-bold text-white mb-4"
-        >
-          TaskVision
-        </motion.h1>
-        <motion.p
-          initial={{ y: 20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.5, duration: 0.8 }}
-          className="text-white text-xl"
-        >
-          Manage Tasks Efficiently
-        </motion.p>
+      {/* Main App Title */}
+      <div className="text-center mb-8 animate-fade-in-up">
+        <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">
+          Task Management System
+        </h1>
+        <p className="text-xl text-indigo-200">Streamline Your Workflow</p>
       </div>
-    </motion.div>
+
+      {/* MIDIZ Logo and Powered By Text */}
+      <Suspense fallback={<div className="w-48 h-48 animate-pulse bg-indigo-500/50 rounded-lg" />}>
+        <div className="text-center animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
+          {/* MIDIZ Logo */}
+          <div className="w-48 h-48 mx-auto mb-6 flex items-center justify-center">
+            <img 
+              src="/Midiz.png" 
+              alt="MIDIZ Logo" 
+              className={`w-full h-full object-contain transition-opacity duration-300 ${
+                imageLoaded ? 'opacity-100' : 'opacity-0'
+              }`}
+              loading="eager"
+              decoding="async"
+            />
+          </div>
+          
+          {/* Powered By Text */}
+          <div className="text-white text-lg tracking-widest">
+            POWERED BY <span className="font-bold text-cyan-400">MIDIZ</span>
+          </div>
+        </div>
+      </Suspense>
+    </div>
   );
 } 

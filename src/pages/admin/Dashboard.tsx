@@ -9,6 +9,7 @@ import {
   ClockIcon,
   CheckIcon,
 } from '@heroicons/react/outline';
+import EmployeeTracking from '../../components/EmployeeTracking';
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState({
@@ -77,10 +78,19 @@ export default function AdminDashboard() {
 
   return (
     <Layout>
-      <div className="py-6">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
-          <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
+      <div className="space-y-6">
+        <div className="bg-white rounded-lg shadow-lg p-6">
+          <h1 className="text-2xl font-bold text-gray-800 mb-4">Admin Dashboard</h1>
+          <p className="text-gray-600">
+            Monitor your team's activities and track field employees in real-time.
+          </p>
         </div>
+
+        {/* Employee Tracking Map */}
+        <EmployeeTracking />
+        
+        {/* Rest of your dashboard content */}
+        <div className="py-6">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
           {/* Stats */}
           <div className="mt-8">
@@ -213,6 +223,7 @@ export default function AdminDashboard() {
                   </li>
                 ))}
               </ul>
+              </div>
             </div>
           </div>
         </div>

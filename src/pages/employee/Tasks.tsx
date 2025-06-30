@@ -3,7 +3,9 @@ import Layout from '../../components/Layout';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { Task } from '../../types/index';
-import TaskProofModal from '../../components/TaskProofModal';
+import TaskSubmissionWithProof from '../../components/TaskSubmissionWithProof';
+import TaskCountdown from '../../components/TaskCountdown';
+import DeleteTaskModal from '../../components/DeleteTaskModal';
 import toast from 'react-hot-toast';
 import { formatCurrency } from '../../utils/currency';
 import {
@@ -14,7 +16,8 @@ import {
   CurrencyDollarIcon,
   CalendarIcon,
   PhotographIcon,
-  CheckCircleIcon
+  CheckCircleIcon,
+  TrashIcon
 } from '@heroicons/react/outline';
 
 export default function Tasks() {
@@ -23,7 +26,8 @@ export default function Tasks() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'active' | 'completed'>('all');
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  const [isProofModalOpen, setIsProofModalOpen] = useState(false);
+  const [showSubmissionForm, setShowSubmissionForm] = useState(false);
+  const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
 
   useEffect(() => {
     fetchTasks();
@@ -39,7 +43,6 @@ export default function Tasks() {
 
       if (error) throw error;
       
-      // Process tasks to include proof status
       const processedTasks = (data || []).map(task => ({
         ...task,
         hasApprovedProof: task.task_proofs?.some((proof: any) => proof.status === 'Approved')
@@ -56,20 +59,38 @@ export default function Tasks() {
 
   async function updateTaskStatus(taskId: string, newStatus: Task['status']) {
     try {
+      const now = new Date().toISOString();
+      const task = tasks.find(t => t.id === taskId);
+      if (!task) return;
+
+      let updates: any = {
+        status: newStatus,
+        updated_at: now
+      };
+
+      // Handle timing updates
+      if (newStatus === 'In Progress') {
+        if (!task.started_at) {
+          updates.started_at = now;
+        } else if (task.last_pause_at) {
+          // Calculate additional pause duration if resuming
+          const pauseDuration = new Date(now).getTime() - new Date(task.last_pause_at).getTime();
+          updates.total_pause_duration = (task.total_pause_duration || 0) + pauseDuration;
+          updates.last_pause_at = null;
+        }
+      } else if (newStatus === 'Paused') {
+        updates.last_pause_at = now;
+      }
+
       const { error } = await supabase
         .from('tasks')
-        .update({ 
-          status: newStatus,
-          updated_at: new Date().toISOString()
-        })
+        .update(updates)
         .eq('id', taskId);
 
       if (error) throw error;
 
       setTasks(prev =>
-        prev.map(task =>
-          task.id === taskId ? { ...task, status: newStatus } : task
-        )
+        prev.map(t => (t.id === taskId ? { ...t, ...updates } : t))
       );
 
       toast.success(`Task ${newStatus.toLowerCase()}`);
@@ -81,11 +102,77 @@ export default function Tasks() {
 
   const handleCompleteClick = (task: Task) => {
     setSelectedTask(task);
-    setIsProofModalOpen(true);
+    setShowSubmissionForm(true);
   };
 
-  const handleProofSubmitted = () => {
-    fetchTasks(); // Refresh tasks to show updated status
+  const handleSubmitProof = async (data: { taskId: string; proofPhoto: string; notes: string }) => {
+    try {
+      // First, create the task proof
+      const { error: proofError } = await supabase
+        .from('task_proofs')
+        .insert([
+          {
+            task_id: data.taskId,
+            photo_url: data.proofPhoto,
+            notes: data.notes,
+            submitted_by: user?.id,
+            status: 'Pending'
+          }
+        ]);
+
+      if (proofError) throw proofError;
+
+      // Then update the task status
+      const now = new Date().toISOString();
+      const task = tasks.find(t => t.id === data.taskId);
+      
+      if (task) {
+        const updates = {
+          status: 'Completed',
+          completed_at: now,
+          updated_at: now
+        };
+
+        if (task.last_pause_at) {
+          const pauseDuration = new Date(now).getTime() - new Date(task.last_pause_at).getTime();
+          updates.total_pause_duration = (task.total_pause_duration || 0) + pauseDuration;
+        }
+
+        const { error: taskError } = await supabase
+          .from('tasks')
+          .update(updates)
+          .eq('id', data.taskId);
+
+        if (taskError) throw taskError;
+      }
+
+      toast.success('Task proof submitted successfully');
+      setShowSubmissionForm(false);
+      fetchTasks();
+    } catch (error) {
+      console.error('Error submitting task proof:', error);
+      toast.error('Failed to submit task proof');
+    }
+  };
+
+  const handleDeleteTask = async () => {
+    if (!taskToDelete) return;
+
+    try {
+      const { error } = await supabase
+        .from('tasks')
+        .delete()
+        .eq('id', taskToDelete.id);
+
+      if (error) throw error;
+
+      setTasks(prev => prev.filter(task => task.id !== taskToDelete.id));
+      toast.success('Task deleted successfully');
+      setTaskToDelete(null);
+    } catch (error) {
+      console.error('Error deleting task:', error);
+      toast.error('Failed to delete task');
+    }
   };
 
   const filteredTasks = tasks.filter(task => {
@@ -176,95 +263,104 @@ export default function Tasks() {
               <p className="text-gray-500">No tasks found</p>
             </div>
           ) : (
-            <ul className="divide-y divide-gray-200">
-              {filteredTasks.map((task) => (
-                <li key={task.id} className="p-4 hover:bg-gray-50">
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1 min-w-0">
-                      <h3 className="text-lg font-medium text-gray-900">
-                        {task.title}
-                      </h3>
-                      <p className="mt-1 text-sm text-gray-500">
-                        {task.description}
-                      </p>
-                      <div className="mt-2 flex items-center space-x-4 text-sm text-gray-500">
-                        <div className="flex items-center">
-                          <ClockIcon className="h-4 w-4 mr-1" />
-                          {task.actual_time || 0}h
+            <div className="overflow-hidden">
+              <ul role="list" className="divide-y divide-gray-200">
+                {filteredTasks.map((task) => (
+                  <li key={task.id} className="p-4 sm:p-6">
+                    <div className="flex items-center justify-between flex-wrap gap-4">
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-lg font-medium text-gray-900">{task.title}</h3>
+                        <p className="mt-1 text-sm text-gray-500">{task.description}</p>
+                        <div className="mt-2 flex flex-wrap gap-4">
+                          <div className="flex items-center text-sm text-gray-500">
+                            <CalendarIcon className="mr-1.5 h-5 w-5 flex-shrink-0 text-gray-400" />
+                            Due: {new Date(task.due_date).toLocaleDateString()}
+                          </div>
+                          <div className="flex items-center text-sm text-gray-500">
+                            <CurrencyDollarIcon className="mr-1.5 h-5 w-5 flex-shrink-0 text-gray-400" />
+                            {formatCurrency(task.price)}
+                          </div>
+                          <div className="flex items-center">
+                            <TaskCountdown dueDate={task.due_date} status={task.status} />
+                          </div>
                         </div>
-                        <div className="flex items-center">
-                          <CurrencyDollarIcon className="h-4 w-4 mr-1" />
-                          {formatCurrency(task.price)}
-                        </div>
-                        <div className="flex items-center">
-                          <CalendarIcon className="h-4 w-4 mr-1" />
-                          Due: {new Date(task.due_date).toLocaleDateString()}
+                      </div>
+                      <div className="flex flex-col sm:flex-row gap-2 items-end sm:items-center">
+                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(task.status, task.hasApprovedProof)}`}>
+                          {getStatusText(task.status, task.hasApprovedProof)}
+                        </span>
+                        <div className="flex gap-2">
+                          {task.status !== 'Completed' && (
+                            <>
+                              {task.status === 'In Progress' ? (
+                                <button
+                                  onClick={() => updateTaskStatus(task.id, 'Paused')}
+                                  className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-yellow-600 hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500"
+                                >
+                                  <PauseIcon className="h-4 w-4 mr-1" />
+                                  Pause
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => updateTaskStatus(task.id, 'In Progress')}
+                                  className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                                >
+                                  <PlayIcon className="h-4 w-4 mr-1" />
+                                  {task.status === 'Paused' ? 'Resume' : 'Start'}
+                                </button>
+                              )}
+                              {task.status !== 'Not Started' && (
+                                <button
+                                  onClick={() => handleCompleteClick(task)}
+                                  className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                                >
+                                  <CheckIcon className="h-4 w-4 mr-1" />
+                                  Complete
+                                </button>
+                              )}
+                            </>
+                          )}
+                          <button
+                            onClick={() => setTaskToDelete(task)}
+                            className="inline-flex items-center px-2 py-1.5 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                            aria-label="Delete task"
+                          >
+                            <TrashIcon className="h-4 w-4" />
+                          </button>
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center space-x-4">
-                      <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(
-                          task.status,
-                          task.hasApprovedProof ?? false
-                        )}`}
-                      >
-                        <span className="flex items-center">
-                          {task.status === 'Completed' && task.hasApprovedProof && (
-                            <CheckCircleIcon className="h-4 w-4 mr-1" />
-                          )}
-                          {getStatusText(task.status, task.hasApprovedProof ?? false)}
-                        </span>
-                      </span>
-                      {(!task.hasApprovedProof && task.status !== 'Completed') && (
-                        <div className="flex space-x-2">
-                          {task.status !== 'In Progress' && (
-                            <button
-                              onClick={() =>
-                                updateTaskStatus(task.id, 'In Progress')
-                              }
-                              className="p-1 rounded-full text-blue-600 hover:bg-blue-100"
-                              title="Start Task"
-                            >
-                              <PlayIcon className="h-5 w-5" />
-                            </button>
-                          )}
-                          {task.status === 'In Progress' && (
-                            <button
-                              onClick={() => updateTaskStatus(task.id, 'Paused')}
-                              className="p-1 rounded-full text-yellow-600 hover:bg-yellow-100"
-                              title="Pause Task"
-                            >
-                              <PauseIcon className="h-5 w-5" />
-                            </button>
-                          )}
-                          <button
-                            onClick={() => handleCompleteClick(task)}
-                            className="p-1 rounded-full text-green-600 hover:bg-green-100"
-                            title="Complete Task with Proof"
-                          >
-                            <PhotographIcon className="h-5 w-5" />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
         </div>
       </div>
 
-      {selectedTask && (
-        <TaskProofModal
-          isOpen={isProofModalOpen}
-          onClose={() => {
-            setIsProofModalOpen(false);
-            setSelectedTask(null);
-          }}
-          task={selectedTask}
-          onProofSubmitted={handleProofSubmitted}
+      {/* Task Submission Form */}
+      {showSubmissionForm && selectedTask && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" />
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+              <TaskSubmissionWithProof
+                taskId={selectedTask.id}
+                onSubmit={handleSubmitProof}
+                onCancel={() => setShowSubmissionForm(false)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Task Modal */}
+      {taskToDelete && (
+        <DeleteTaskModal
+          isOpen={!!taskToDelete}
+          onClose={() => setTaskToDelete(null)}
+          onConfirm={handleDeleteTask}
+          taskTitle={taskToDelete.title}
         />
       )}
     </Layout>
