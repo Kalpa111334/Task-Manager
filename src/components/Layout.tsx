@@ -15,6 +15,8 @@ import {
   ViewGridIcon,
   ViewListIcon,
   InboxIcon,
+  LocationMarkerIcon,
+  MapIcon,
 } from '@heroicons/react/outline';
 
 interface LayoutProps {
@@ -51,6 +53,7 @@ export default function Layout({ children }: LayoutProps) {
         { name: 'Dashboard', href: '/admin/dashboard', icon: ViewGridIcon },
         { name: 'Tasks', href: '/admin/tasks', icon: ViewListIcon },
         { name: 'Task Pool', href: '/admin/tasks/pool', icon: InboxIcon },
+        { name: 'Location Management', href: '/admin/location', icon: MapIcon },
         { name: 'Reports', href: '/admin/reports', icon: DocumentReportIcon },
         { name: 'Analytics', href: '/admin/analytics', icon: ChartBarIcon },
         { name: 'Team', href: '/admin/team', icon: UserGroupIcon },
@@ -59,6 +62,7 @@ export default function Layout({ children }: LayoutProps) {
     : [
         { name: 'Dashboard', href: '/employee', icon: HomeIcon },
         { name: 'My Tasks', href: '/employee/tasks', icon: ClipboardListIcon },
+        { name: 'Location Tasks', href: '/employee/location-tasks', icon: LocationMarkerIcon },
         { name: 'Chat', href: '/employee/chat', icon: ChatIcon },
       ];
 
@@ -189,4 +193,4 @@ export default function Layout({ children }: LayoutProps) {
       </div>
     </div>
   );
-} 
+}
