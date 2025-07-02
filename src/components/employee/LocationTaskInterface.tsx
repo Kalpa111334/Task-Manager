@@ -149,13 +149,10 @@ export default function LocationTaskInterface() {
       }
 
       // Start tracking first to ensure we have permissions
-      await EnhancedLocationService.startTracking(user!.id, undefined, {
-        enableHighAccuracy: true,
-        trackMovement: true
-      });
+      await EnhancedLocationService.startTracking(user!.id);
       
       // Get current location
-      const location = await LocationService.getCurrentLocation();
+      const location = await LocationService.getUserLocation(user!.id);
       if (!location) {
         throw new Error('Could not retrieve location data');
       }
