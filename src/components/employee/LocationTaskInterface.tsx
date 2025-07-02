@@ -139,6 +139,10 @@ export default function LocationTaskInterface() {
       
       // Get current location from LocationService
       const location = await LocationService.getUserLocation(user!.id);
+      if (!location) {
+        throw new Error('Could not retrieve location data');
+      }
+      
       setCurrentLocation({
         latitude: location.latitude,
         longitude: location.longitude,
@@ -151,7 +155,7 @@ export default function LocationTaskInterface() {
       toast.success('Location tracking enabled');
     } catch (error: any) {
       console.error('Error initializing location:', error);
-      setLocationError(error.message);
+      setLocationError(error.message || 'Failed to enable location tracking');
       setIsLocationEnabled(false);
       toast.error('Failed to enable location tracking');
     }
