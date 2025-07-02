@@ -137,8 +137,25 @@ export default function LocationTaskInterface() {
     try {
       setLocationError('');
       
-      // Get current location from LocationService
-      const location = await LocationService.getUserLocation(user!.id);
+      // First check if geolocation is available
+      if (!navigator.geolocation) {
+        throw new Error('Geolocation is not supported by your browser');
+      }
+
+      // Request permission first
+      const permission = await navigator.permissions.query({ name: 'geolocation' });
+      if (permission.state === 'denied') {
+        throw new Error('Location permission denied. Please enable location access in your browser settings.');
+      }
+
+      // Start tracking first to ensure we have permissions
+      await EnhancedLocationService.startTracking(user!.id, undefined, {
+        enableHighAccuracy: true,
+        trackMovement: true
+      });
+      
+      // Get current location
+      const location = await LocationService.getCurrentLocation();
       if (!location) {
         throw new Error('Could not retrieve location data');
       }
@@ -148,16 +165,16 @@ export default function LocationTaskInterface() {
         longitude: location.longitude,
       });
       
-      // Start tracking
-      await EnhancedLocationService.startTracking(user!.id);
-      
       setIsLocationEnabled(true);
       toast.success('Location tracking enabled');
     } catch (error: any) {
       console.error('Error initializing location:', error);
       setLocationError(error.message || 'Failed to enable location tracking');
       setIsLocationEnabled(false);
-      toast.error('Failed to enable location tracking');
+      toast.error(error.message || 'Failed to enable location tracking');
+      
+      // Stop tracking if it was started but failed later
+      EnhancedLocationService.stopTracking();
     }
   };
 
