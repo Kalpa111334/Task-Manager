@@ -16,6 +16,7 @@ import {
   PauseIcon,
 } from '@heroicons/react/outline';
 import toast from 'react-hot-toast';
+import { LocationService } from '../../services/LocationService';
 
 interface TaskWithLocation extends Task {
   location_required: boolean;
@@ -136,19 +137,15 @@ export default function LocationTaskInterface() {
     try {
       setLocationError('');
       
-      // Get current location
-      const location = await EnhancedLocationService.getCurrentLocation();
+      // Get current location from LocationService
+      const location = await LocationService.getUserLocation();
       setCurrentLocation({
         latitude: location.latitude,
         longitude: location.longitude,
       });
       
       // Start tracking
-      await EnhancedLocationService.startTracking(user!.id, undefined, {
-        enableHighAccuracy: true,
-        trackMovement: true,
-        geofenceMonitoring: true,
-      });
+      await EnhancedLocationService.startTracking(user!.id);
       
       setIsLocationEnabled(true);
       toast.success('Location tracking enabled');
@@ -164,7 +161,7 @@ export default function LocationTaskInterface() {
     if (!currentLocation) return;
 
     const updatedTasks = taskList.map(task => {
-      if (task.location_latitude && task.location_longitude) {
+      if (task.location_latitude && task.location_longitude && task.location_radius_meters) {
         const distance = GeofencingService.calculateDistance(
           currentLocation.latitude,
           currentLocation.longitude,
@@ -172,10 +169,12 @@ export default function LocationTaskInterface() {
           task.location_longitude
         );
         
+        const radius = task.location_radius_meters || 100; // Default to 100m if undefined
+        
         return {
           ...task,
           distance_to_location: distance,
-          is_at_location: distance <= task.location_radius_meters,
+          is_at_location: distance <= radius,
         };
       }
       return task;
@@ -189,22 +188,18 @@ export default function LocationTaskInterface() {
 
     setCheckingIn(task.id);
     try {
-      await EnhancedLocationService.checkIn(task.id, user.id, 'Manual check-in');
+      await LocationService.recordTaskEvent(task.id, user.id, 'check_in');
       toast.success('Checked in successfully');
       
       // Update task status if not already in progress
       if (task.status === 'Not Started') {
         await supabase
           .from('tasks')
-          .update({ 
-            status: 'In Progress',
-            started_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          })
+          .update({ status: 'In Progress' })
           .eq('id', task.id);
-        
-        fetchTasks();
       }
+      
+      fetchTasks();
     } catch (error) {
       console.error('Error checking in:', error);
       toast.error('Failed to check in');
@@ -218,8 +213,9 @@ export default function LocationTaskInterface() {
 
     setCheckingOut(task.id);
     try {
-      await EnhancedLocationService.checkOut(task.id, user.id, 'Manual check-out');
+      await LocationService.recordTaskEvent(task.id, user.id, 'check_out');
       toast.success('Checked out successfully');
+      fetchTasks();
     } catch (error) {
       console.error('Error checking out:', error);
       toast.error('Failed to check out');
