@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { GoogleMap, Marker, InfoWindow, Circle, Polygon } from '@react-google-maps/api';
+import { GoogleMap, Marker, InfoWindow, Circle, CircleProps } from '@react-google-maps/api';
 import { EnhancedLocationService } from '../../services/EnhancedLocationService';
 import { GeofencingService, Geofence, LocationAlert } from '../../services/GeofencingService';
 import { supabase } from '../../lib/supabase';
@@ -159,7 +159,7 @@ export default function LocationTaskDashboard() {
           if (task.location_latitude && task.location_longitude) {
             bounds.extend({ lat: task.location_latitude, lng: task.location_longitude });
           }
-          task.geofences?.forEach((geofence) => {
+          task.geofences?.forEach((geofence: { id: string; name: string; center_latitude: number; center_longitude: number; radius_meters: number }) => {
             bounds.extend({ lat: geofence.center_latitude, lng: geofence.center_longitude });
           });
         });
@@ -293,6 +293,10 @@ export default function LocationTaskDashboard() {
 
   const unreadAlerts = alerts.filter(alert => !alert.is_read);
 
+  const handleGeofenceSelect = (geofence: Geofence) => {
+    // Implementation
+  };
+
   if (loadError) return <div className="p-4 text-red-600">Error loading maps</div>;
   if (!isLoaded) return <div className="p-4">Loading maps...</div>;
 
@@ -337,6 +341,7 @@ export default function LocationTaskDashboard() {
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value as any)}
               className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+              aria-label="Filter tasks by status"
             >
               <option value="all">All Tasks</option>
               <option value="active">Active Tasks</option>
@@ -371,8 +376,9 @@ export default function LocationTaskDashboard() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Radius (meters)</label>
+                <label htmlFor="radius" className="block text-sm font-medium text-gray-700">Radius (meters)</label>
                 <input
+                  id="radius"
                   type="number"
                   value={newGeofence.radius}
                   onChange={(e) => setNewGeofence(prev => ({ ...prev, radius: parseInt(e.target.value) }))}
@@ -536,11 +542,16 @@ export default function LocationTaskDashboard() {
               }}
               radius={geofence.radius_meters}
               options={{
-                fillColor: '#3B82F6',
-                fillOpacity: 0.1,
-                strokeColor: '#3B82F6',
+                strokeColor: '#FF0000',
                 strokeOpacity: 0.8,
                 strokeWeight: 2,
+                fillColor: '#FF0000',
+                fillOpacity: 0.35,
+                clickable: true,
+                draggable: false,
+                editable: true,
+                visible: true,
+                zIndex: 1
               }}
             />
           ))}
@@ -554,12 +565,16 @@ export default function LocationTaskDashboard() {
               }}
               radius={newGeofence.radius}
               options={{
-                fillColor: '#10B981',
-                fillOpacity: 0.2,
-                strokeColor: '#10B981',
-                strokeOpacity: 1,
-                strokeWeight: 3,
-                strokeDashArray: '10,5',
+                strokeColor: '#FF0000',
+                strokeOpacity: 0.8,
+                strokeWeight: 2,
+                fillColor: '#FF0000',
+                fillOpacity: 0.35,
+                clickable: true,
+                draggable: false,
+                editable: true,
+                visible: true,
+                zIndex: 1
               }}
             />
           )}

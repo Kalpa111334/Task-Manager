@@ -26,6 +26,14 @@ interface FormInputs {
   auto_check_in: boolean;
   auto_check_out: boolean;
   geofence_id?: string;
+  location_data?: {
+    geofence_id: string | null;
+    required_latitude: number | null;
+    required_longitude: number | null;
+    required_radius_meters: number;
+    arrival_required: boolean;
+    departure_required: boolean;
+  };
 }
 
 export default function EnhancedTaskForm({ onSubmit, initialData, isEdit = false }: EnhancedTaskFormProps) {
