@@ -271,7 +271,7 @@ export default function Reports() {
         .from('tasks')
         .select(`
           *,
-          users!inner(
+          assigned_user:users!tasks_assigned_to_fkey(
             id,
             full_name
           )
@@ -295,7 +295,7 @@ export default function Reports() {
 
           // Track employee performance
           acc.employeeStats[task.assigned_to] = acc.employeeStats[task.assigned_to] || {
-            name: task.users.full_name,
+            name: task.assigned_user?.full_name || 'Unknown',
             tasksCompleted: 0,
             earnings: 0
           };
@@ -337,7 +337,7 @@ export default function Reports() {
         .select(`
           *,
           assigned_to,
-          users!inner(
+          assigned_user:users!tasks_assigned_to_fkey(
             id,
             full_name
           )
@@ -353,7 +353,7 @@ export default function Reports() {
         if (!acc[employeeId]) {
           acc[employeeId] = {
             id: employeeId,
-            name: task.users.full_name,
+            name: task.assigned_user?.full_name || 'Unknown',
             tasksCompleted: 0,
             hoursWorked: 0,
             earnings: 0
@@ -618,4 +618,4 @@ export default function Reports() {
       </ResponsiveContainer>
     </Layout>
   );
-} 
+}
