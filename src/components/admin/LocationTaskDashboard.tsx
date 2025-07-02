@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { GoogleMap, useLoadScript, Marker, InfoWindow, Circle, Polygon } from '@react-google-maps/api';
+import { GoogleMap, Marker, InfoWindow, Circle, Polygon } from '@react-google-maps/api';
 import { EnhancedLocationService } from '../../services/EnhancedLocationService';
 import { GeofencingService, Geofence, LocationAlert } from '../../services/GeofencingService';
 import { supabase } from '../../lib/supabase';
 import { Task, User } from '../../types/index';
 import { formatCurrency } from '../../utils/currency';
+import { useGoogleMaps } from '../GoogleMapsLoader';
 import {
   LocationMarkerIcon,
   ExclamationIcon,
@@ -15,8 +16,6 @@ import {
   BellIcon,
 } from '@heroicons/react/outline';
 import toast from 'react-hot-toast';
-
-const libraries: ("places" | "geometry" | "drawing" | "visualization")[] = ["places", "geometry"];
 
 const mapContainerStyle = {
   width: '100%',
@@ -67,10 +66,7 @@ interface TaskWithLocation extends Task {
 }
 
 export default function LocationTaskDashboard() {
-  const { isLoaded, loadError } = useLoadScript({
-    googleMapsApiKey: "AIzaSyARSoKujCNX2odk8wachQyz0DIjBCqJNd4",
-    libraries,
-  });
+  const { isLoaded, loadError } = useGoogleMaps();
 
   const [locations, setLocations] = useState<EmployeeLocation[]>([]);
   const [tasks, setTasks] = useState<TaskWithLocation[]>([]);

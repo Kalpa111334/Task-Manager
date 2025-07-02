@@ -3,178 +3,137 @@ import { supabase } from '../lib/supabase';
 export interface LocationData {
   latitude: number;
   longitude: number;
+  accuracy?: number;
+  timestamp: string;
   battery_level?: number;
-  connection_status?: string;
+  connection_status?: 'online' | 'offline';
   task_id?: string;
-  location_accuracy?: number;
-  timestamp?: string;
 }
 
 export class LocationService {
   private static watchId: number | null = null;
   private static isTracking = false;
-  private static retryCount = 0;
-  private static maxRetries = 3;
-  private static retryTimeout: NodeJS.Timeout | null = null;
+  private static currentUserId: string | null = null;
 
-  static async startTracking(userId: string, taskId?: string) {
-    if (!navigator.geolocation) {
-      throw new Error('Geolocation is not supported by your browser');
-    }
-
+  static async startTracking(userId: string): Promise<void> {
     if (this.isTracking) {
+      console.log('Location tracking already active');
       return;
     }
 
+    this.currentUserId = userId;
     this.isTracking = true;
-    this.retryCount = 0;
+
+    if (!navigator.geolocation) {
+      throw new Error('Geolocation is not supported by this browser');
+    }
 
     const options = {
       enableHighAccuracy: true,
-      timeout: 10000, // Increased timeout for better accuracy
-      maximumAge: 0
+      timeout: 10000,
+      maximumAge: 60000, // 1 minute
     };
 
-    try {
-      // Request permission first
-      const permission = await this.requestLocationPermission();
-      if (!permission) {
-        throw new Error('Location permission denied');
-      }
+    this.watchId = navigator.geolocation.watchPosition(
+      (position) => this.handleLocationUpdate(position),
+      (error) => this.handleLocationError(error),
+      options
+    );
 
-      this.watchId = navigator.geolocation.watchPosition(
-        async (position) => {
-          try {
-            // Reset retry count on successful position
-            this.retryCount = 0;
-            
-            const locationData: LocationData = {
-              latitude: position.coords.latitude,
-              longitude: position.coords.longitude,
-              location_accuracy: position.coords.accuracy,
-              task_id: taskId,
-              timestamp: new Date().toISOString(),
-            };
+    // Also send initial location
+    navigator.geolocation.getCurrentPosition(
+      (position) => this.handleLocationUpdate(position),
+      (error) => console.warn('Initial location failed:', error),
+      options
+    );
 
-            // Add battery information if available
-            if ('getBattery' in navigator) {
-              const battery: any = await (navigator as any).getBattery();
-              locationData.battery_level = Math.round(battery.level * 100);
-            }
-
-            // Add connection status
-            locationData.connection_status = navigator.onLine ? 'online' : 'offline';
-
-            // Store location in Supabase
-            const { error } = await supabase
-              .from('employee_locations')
-              .insert([{
-                user_id: userId,
-                ...locationData
-              }]);
-
-            if (error) {
-              console.error('Error storing location:', error);
-              this.handleError(error, userId, taskId);
-            }
-          } catch (error) {
-            console.error('Error in location tracking:', error);
-            this.handleError(error, userId, taskId);
-          }
-        },
-        (error) => {
-          console.error('Error getting location:', error);
-          this.handleError(error, userId, taskId);
-        },
-        options
-      );
-
-      // Add online/offline event listeners
-      window.addEventListener('online', () => this.handleConnectivityChange(true, userId));
-      window.addEventListener('offline', () => this.handleConnectivityChange(false, userId));
-
-    } catch (error) {
-      console.error('Error starting location tracking:', error);
-      this.handleError(error, userId, taskId);
-    }
+    console.log('Location tracking started for user:', userId);
   }
 
-  private static async requestLocationPermission(): Promise<boolean> {
-    try {
-      const result = await navigator.permissions.query({ name: 'geolocation' });
-      return result.state === 'granted' || result.state === 'prompt';
-    } catch (error) {
-      console.error('Error checking location permission:', error);
-      return false;
-    }
-  }
-
-  private static handleError(error: any, userId: string, taskId?: string) {
-    if (this.retryCount < this.maxRetries) {
-      this.retryCount++;
-      console.log(`Retrying location tracking (attempt ${this.retryCount}/${this.maxRetries})...`);
-      
-      // Clear existing retry timeout if any
-      if (this.retryTimeout) {
-        clearTimeout(this.retryTimeout);
-      }
-
-      // Exponential backoff for retries
-      const retryDelay = Math.min(1000 * Math.pow(2, this.retryCount - 1), 30000);
-      this.retryTimeout = setTimeout(() => {
-        this.stopTracking();
-        this.startTracking(userId, taskId);
-      }, retryDelay);
-    } else {
-      console.error('Max retry attempts reached. Location tracking failed.');
-      this.stopTracking();
-    }
-  }
-
-  private static async handleConnectivityChange(isOnline: boolean, userId: string) {
-    try {
-      const { error } = await supabase
-        .from('employee_locations')
-        .update({ connection_status: isOnline ? 'online' : 'offline' })
-        .eq('user_id', userId)
-        .order('timestamp', { ascending: false })
-        .limit(1);
-
-      if (error) {
-        console.error('Error updating connection status:', error);
-      }
-    } catch (error) {
-      console.error('Error handling connectivity change:', error);
-    }
-  }
-
-  static stopTracking() {
+  static stopTracking(): void {
     if (this.watchId !== null) {
       navigator.geolocation.clearWatch(this.watchId);
       this.watchId = null;
-      this.isTracking = false;
-      
-      // Clear retry timeout if any
-      if (this.retryTimeout) {
-        clearTimeout(this.retryTimeout);
-        this.retryTimeout = null;
-      }
+    }
+    this.isTracking = false;
+    this.currentUserId = null;
+    console.log('Location tracking stopped');
+  }
 
-      // Remove event listeners
-      window.removeEventListener('online', () => {});
-      window.removeEventListener('offline', () => {});
+  private static async handleLocationUpdate(position: GeolocationPosition): Promise<void> {
+    if (!this.currentUserId) return;
+
+    const locationData: LocationData = {
+      latitude: position.coords.latitude,
+      longitude: position.coords.longitude,
+      accuracy: position.coords.accuracy,
+      timestamp: new Date().toISOString(),
+      battery_level: await this.getBatteryLevel(),
+      connection_status: navigator.onLine ? 'online' : 'offline',
+    };
+
+    try {
+      await this.saveLocation(this.currentUserId, locationData);
+    } catch (error) {
+      console.error('Failed to save location:', error);
     }
   }
 
-  static async getEmployeeLocations() {
+  private static handleLocationError(error: GeolocationPositionError): void {
+    console.error('Location error:', error.message);
+    
+    switch (error.code) {
+      case error.PERMISSION_DENIED:
+        console.error('Location access denied by user');
+        break;
+      case error.POSITION_UNAVAILABLE:
+        console.error('Location information unavailable');
+        break;
+      case error.TIMEOUT:
+        console.error('Location request timed out');
+        break;
+    }
+  }
+
+  private static async getBatteryLevel(): Promise<number | undefined> {
+    try {
+      // @ts-ignore - Battery API is experimental
+      if ('getBattery' in navigator) {
+        // @ts-ignore
+        const battery = await navigator.getBattery();
+        return Math.round(battery.level * 100);
+      }
+    } catch (error) {
+      // Battery API not supported or failed
+    }
+    return undefined;
+  }
+
+  static async saveLocation(userId: string, locationData: LocationData): Promise<void> {
+    const { error } = await supabase
+      .from('employee_locations')
+      .insert({
+        user_id: userId,
+        latitude: locationData.latitude,
+        longitude: locationData.longitude,
+        timestamp: locationData.timestamp,
+        battery_level: locationData.battery_level,
+        connection_status: locationData.connection_status,
+        location_accuracy: locationData.accuracy,
+        task_id: locationData.task_id,
+      });
+
+    if (error) {
+      throw error;
+    }
+  }
+
+  static async getEmployeeLocations(): Promise<any[]> {
     const { data, error } = await supabase
       .from('employee_locations')
       .select(`
         *,
-        users:user_id (
-          full_name,
-          avatar_url
-        )
+        users!user_id(full_name, avatar_url)
       `)
       .order('timestamp', { ascending: false });
 
@@ -182,31 +141,52 @@ export class LocationService {
       throw error;
     }
 
-    // Group by user_id and get latest location for each user
-    const latestLocations = data.reduce((acc: any[], location) => {
-      const existingLocation = acc.find(l => l.user_id === location.user_id);
-      if (!existingLocation) {
-        acc.push(location);
+    // Get the latest location for each user
+    const latestLocations = new Map();
+    data?.forEach((location) => {
+      if (!latestLocations.has(location.user_id) || 
+          new Date(location.timestamp) > new Date(latestLocations.get(location.user_id).timestamp)) {
+        latestLocations.set(location.user_id, location);
       }
-      return acc;
-    }, []);
+    });
 
-    return latestLocations;
+    return Array.from(latestLocations.values());
   }
 
-  static async getEmployeeLatestLocation(userId: string) {
+  static async getUserLocation(userId: string): Promise<any | null> {
     const { data, error } = await supabase
       .from('employee_locations')
-      .select('*')
+      .select(`
+        *,
+        users!user_id(full_name, avatar_url)
+      `)
       .eq('user_id', userId)
       .order('timestamp', { ascending: false })
       .limit(1)
       .single();
 
-    if (error) {
+    if (error && error.code !== 'PGRST116') {
       throw error;
     }
 
     return data;
   }
-} 
+
+  static async getLocationHistory(userId: string, hours: number = 24): Promise<any[]> {
+    const since = new Date();
+    since.setHours(since.getHours() - hours);
+
+    const { data, error } = await supabase
+      .from('employee_locations')
+      .select('*')
+      .eq('user_id', userId)
+      .gte('timestamp', since.toISOString())
+      .order('timestamp', { ascending: true });
+
+    if (error) {
+      throw error;
+    }
+
+    return data || [];
+  }
+}

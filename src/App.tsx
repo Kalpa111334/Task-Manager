@@ -5,6 +5,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import SplashScreen from './components/SplashScreen';
 import ErrorBoundary from './components/ErrorBoundary';
 import PrivateRoute from './components/PrivateRoute';
+import GoogleMapsLoader from './components/GoogleMapsLoader';
 import AppRoutes from './routes.tsx';
 
 // Admin Pages
@@ -37,13 +38,13 @@ export default function App() {
           {showSplash ? (
             <SplashScreen onFinish={() => setShowSplash(false)} />
           ) : (
-            <>
+            <GoogleMapsLoader>
               <AppRoutes />
-          <Toaster position="top-right" />
-            </>
+              <Toaster position="top-right" />
+            </GoogleMapsLoader>
           )}
         </AuthProvider>
       </Router>
     </ErrorBoundary>
   );
-} 
+}
