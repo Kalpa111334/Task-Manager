@@ -129,47 +129,95 @@ export class LocationService {
   }
 
   static async getEmployeeLocations(): Promise<any[]> {
-    const { data, error } = await supabase
-      .from('employee_locations')
-      .select(`
-        *,
-        users!user_id(full_name, avatar_url)
-      `)
-      .order('timestamp', { ascending: false });
+    try {
+      // First, get all employee locations
+      const { data: locations, error: locationsError } = await supabase
+        .from('employee_locations')
+        .select('*')
+        .order('timestamp', { ascending: false });
 
-    if (error) {
+      if (locationsError) {
+        throw locationsError;
+      }
+
+      if (!locations || locations.length === 0) {
+        return [];
+      }
+
+      // Get unique user IDs
+      const userIds = [...new Set(locations.map(loc => loc.user_id))];
+
+      // Fetch user data separately
+      const { data: users, error: usersError } = await supabase
+        .from('users')
+        .select('id, full_name, avatar_url')
+        .in('id', userIds);
+
+      if (usersError) {
+        throw usersError;
+      }
+
+      // Create a map of users for quick lookup
+      const userMap = new Map(users?.map(user => [user.id, user]) || []);
+
+      // Get the latest location for each user and attach user data
+      const latestLocations = new Map();
+      locations.forEach((location) => {
+        if (!latestLocations.has(location.user_id) || 
+            new Date(location.timestamp) > new Date(latestLocations.get(location.user_id).timestamp)) {
+          const userData = userMap.get(location.user_id);
+          latestLocations.set(location.user_id, {
+            ...location,
+            users: userData || { full_name: 'Unknown User', avatar_url: null }
+          });
+        }
+      });
+
+      return Array.from(latestLocations.values());
+    } catch (error) {
+      console.error('Error in getEmployeeLocations:', error);
       throw error;
     }
-
-    // Get the latest location for each user
-    const latestLocations = new Map();
-    data?.forEach((location) => {
-      if (!latestLocations.has(location.user_id) || 
-          new Date(location.timestamp) > new Date(latestLocations.get(location.user_id).timestamp)) {
-        latestLocations.set(location.user_id, location);
-      }
-    });
-
-    return Array.from(latestLocations.values());
   }
 
   static async getUserLocation(userId: string): Promise<any | null> {
-    const { data, error } = await supabase
-      .from('employee_locations')
-      .select(`
-        *,
-        users!user_id(full_name, avatar_url)
-      `)
-      .eq('user_id', userId)
-      .order('timestamp', { ascending: false })
-      .limit(1)
-      .single();
+    try {
+      // Get the latest location for the user
+      const { data: location, error: locationError } = await supabase
+        .from('employee_locations')
+        .select('*')
+        .eq('user_id', userId)
+        .order('timestamp', { ascending: false })
+        .limit(1)
+        .single();
 
-    if (error && error.code !== 'PGRST116') {
+      if (locationError && locationError.code !== 'PGRST116') {
+        throw locationError;
+      }
+
+      if (!location) {
+        return null;
+      }
+
+      // Get user data separately
+      const { data: user, error: userError } = await supabase
+        .from('users')
+        .select('id, full_name, avatar_url')
+        .eq('id', userId)
+        .single();
+
+      if (userError) {
+        throw userError;
+      }
+
+      return {
+        ...location,
+        users: user
+      };
+    } catch (error) {
+      console.error('Error in getUserLocation:', error);
       throw error;
     }
-
-    return data;
   }
 
   static async getLocationHistory(userId: string, hours: number = 24): Promise<any[]> {
