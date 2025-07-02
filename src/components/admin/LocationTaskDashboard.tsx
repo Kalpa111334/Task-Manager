@@ -7,7 +7,7 @@ import { Task, User } from '../../types/index';
 import { formatCurrency } from '../../utils/currency';
 import {
   LocationMarkerIcon,
-  ExclamationTriangleIcon,
+  ExclamationIcon,
   CheckCircleIcon,
   ClockIcon,
   UserGroupIcon,
@@ -656,7 +656,7 @@ export default function LocationTaskDashboard() {
                 <div className="flex items-start">
                   <div className="flex-shrink-0">
                     {alert.alert_type === 'emergency' && (
-                      <ExclamationTriangleIcon className="h-6 w-6 text-red-600" />
+                      <ExclamationIcon className="h-6 w-6 text-red-600" />
                     )}
                     {alert.alert_type === 'arrival' && (
                       <LocationMarkerIcon className="h-6 w-6 text-green-600" />

@@ -9,7 +9,7 @@ import {
   LocationMarkerIcon,
   CheckCircleIcon,
   ClockIcon,
-  ExclamationTriangleIcon,
+  ExclamationIcon,
   MapIcon,
   BellIcon,
   PlayIcon,
@@ -295,7 +295,7 @@ export default function LocationTaskInterface() {
         {locationError && (
           <div className="mt-4 p-4 bg-red-50 rounded-lg">
             <div className="flex">
-              <ExclamationTriangleIcon className="h-5 w-5 text-red-400" />
+              <ExclamationIcon className="h-5 w-5 text-red-400" />
               <div className="ml-3">
                 <p className="text-sm text-red-800">{locationError}</p>
               </div>
