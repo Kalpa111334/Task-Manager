@@ -12,10 +12,12 @@ import Team from './pages/admin/Team';
 import Chat from './pages/Chat';
 import Reports from './pages/admin/Reports';
 import TaskPool from './pages/admin/TaskPool';
+import LocationDashboard from './pages/admin/LocationDashboard';
 
 // Employee Pages
 import EmployeeDashboard from './pages/employee/Dashboard';
 import EmployeeTasks from './pages/employee/Tasks';
+import LocationTasks from './pages/employee/LocationTasks';
 
 // Auth Pages
 import Login from './pages/Login';
@@ -41,6 +43,7 @@ export default function AppRoutes() {
             <Route path="analytics" element={<Analytics />} />
             <Route path="team" element={<Team />} />
             <Route path="chat" element={<Chat />} />
+            <Route path="location" element={<LocationDashboard />} />
             <Route index element={<Navigate to="/admin/dashboard" replace />} />
           </Routes>
         </PrivateRoute>
@@ -52,6 +55,7 @@ export default function AppRoutes() {
           <Routes>
             <Route index element={<EmployeeDashboard />} />
             <Route path="tasks" element={<EmployeeTasks />} />
+            <Route path="location-tasks" element={<LocationTasks />} />
             <Route path="chat" element={<Chat />} />
           </Routes>
         </PrivateRoute>
@@ -61,4 +65,4 @@ export default function AppRoutes() {
       <Route path="/" element={<Navigate to="/login" replace />} />
     </Routes>
   );
-} 
+}

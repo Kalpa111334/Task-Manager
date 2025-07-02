@@ -1,9 +1,8 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { GoogleMap, useLoadScript, Marker, InfoWindow } from '@react-google-maps/api';
+import { GoogleMap, Marker, InfoWindow } from '@react-google-maps/api';
 import { LocationService } from '../services/LocationService';
 import { useAuth } from '../contexts/AuthContext';
-
-const libraries: ("places" | "geometry" | "drawing" | "visualization")[] = ["places"];
+import { useGoogleMaps } from './GoogleMapsLoader';
 
 const mapContainerStyle = {
   width: '100%',
@@ -44,11 +43,7 @@ interface EmployeeLocation {
 }
 
 export default function EmployeeTracking() {
-  const { isLoaded, loadError } = useLoadScript({
-    googleMapsApiKey: "AIzaSyARSoKujCNX2odk8wachQyz0DIjBCqJNd4",
-    libraries,
-  });
-
+  const { isLoaded, loadError } = useGoogleMaps();
   const [locations, setLocations] = useState<EmployeeLocation[]>([]);
   const [selectedLocation, setSelectedLocation] = useState<EmployeeLocation | null>(null);
   const { user } = useAuth();
@@ -184,4 +179,4 @@ export default function EmployeeTracking() {
       </div>
     </div>
   );
-} 
+}
