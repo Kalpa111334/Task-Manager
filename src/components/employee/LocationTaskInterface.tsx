@@ -138,7 +138,7 @@ export default function LocationTaskInterface() {
       setLocationError('');
       
       // Get current location from LocationService
-      const location = await LocationService.getUserLocation();
+      const location = await LocationService.getUserLocation(user!.id);
       setCurrentLocation({
         latitude: location.latitude,
         longitude: location.longitude,
@@ -188,7 +188,18 @@ export default function LocationTaskInterface() {
 
     setCheckingIn(task.id);
     try {
-      await LocationService.recordTaskEvent(task.id, user.id, 'check_in');
+      // Record task check-in event
+      const { error } = await supabase
+        .from('task_events')
+        .insert({
+          task_id: task.id,
+          user_id: user.id,
+          event_type: 'check_in',
+          timestamp: new Date().toISOString()
+        });
+
+      if (error) throw error;
+      
       toast.success('Checked in successfully');
       
       // Update task status if not already in progress
@@ -213,7 +224,18 @@ export default function LocationTaskInterface() {
 
     setCheckingOut(task.id);
     try {
-      await LocationService.recordTaskEvent(task.id, user.id, 'check_out');
+      // Record task check-out event
+      const { error } = await supabase
+        .from('task_events')
+        .insert({
+          task_id: task.id,
+          user_id: user.id,
+          event_type: 'check_out',
+          timestamp: new Date().toISOString()
+        });
+
+      if (error) throw error;
+      
       toast.success('Checked out successfully');
       fetchTasks();
     } catch (error) {
