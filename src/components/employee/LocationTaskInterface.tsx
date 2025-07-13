@@ -282,12 +282,26 @@ export default function LocationTaskInterface() {
   };
 
   const handleCheckOut = async (task: TaskWithLocation) => {
-    if (!user) return;
+    if (!user) {
+      toast.error('User not authenticated');
+      return;
+    }
+
+    // Validate task status and assignment
+    if (task.status !== 'In Progress') {
+      toast.error('Only tasks in progress can be checked out');
+      return;
+    }
+
+    if (task.assigned_to !== user.id) {
+      toast.error('You are not authorized to check out this task');
+      return;
+    }
 
     setCheckingOut(task.id);
     try {
       // Record task check-out event
-      const { error } = await supabase
+      const { error: eventError } = await supabase
         .from('task_events')
         .insert({
           task_id: task.id,
@@ -296,7 +310,28 @@ export default function LocationTaskInterface() {
           timestamp: new Date().toISOString()
         });
 
-      if (error) throw error;
+      if (eventError) {
+        console.error('Error creating check-out event:', eventError);
+        toast.error('Failed to record check-out event');
+        return;
+      }
+      
+      // Optional: Update task status if needed
+      const { error: taskUpdateError } = await supabase
+        .from('tasks')
+        .update({ 
+          status: 'Paused', 
+          updated_at: new Date().toISOString(),
+          last_pause_at: new Date().toISOString()
+        })
+        .eq('id', task.id)
+        .eq('assigned_to', user.id);
+
+      if (taskUpdateError) {
+        console.error('Error updating task status:', taskUpdateError);
+        toast.error('Failed to update task status');
+        return;
+      }
       
       toast.success('Checked out successfully');
       fetchTasks();
