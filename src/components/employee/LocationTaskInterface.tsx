@@ -300,39 +300,21 @@ export default function LocationTaskInterface() {
 
     setCheckingOut(task.id);
     try {
-      // Record task check-out event
-      const { error: eventError } = await supabase
-        .from('task_events')
-        .insert({
-          task_id: task.id,
-          user_id: user.id,
-          event_type: 'check_out',
-          timestamp: new Date().toISOString()
-        });
+      const now = new Date().toISOString();
 
-      if (eventError) {
-        console.error('Error creating check-out event:', eventError);
-        toast.error('Failed to record check-out event');
+      // Use a transaction to ensure both operations succeed or fail together
+      const { data, error } = await supabase.rpc('check_out_task', {
+        p_task_id: task.id,
+        p_user_id: user.id,
+        p_timestamp: now
+      });
+
+      if (error) {
+        console.error('Error in check-out transaction:', error);
+        toast.error(error.message || 'Failed to record check-out event');
         return;
       }
-      
-      // Optional: Update task status if needed
-      const { error: taskUpdateError } = await supabase
-        .from('tasks')
-        .update({ 
-          status: 'Paused', 
-          updated_at: new Date().toISOString(),
-          last_pause_at: new Date().toISOString()
-        })
-        .eq('id', task.id)
-        .eq('assigned_to', user.id);
 
-      if (taskUpdateError) {
-        console.error('Error updating task status:', taskUpdateError);
-        toast.error('Failed to update task status');
-        return;
-      }
-      
       toast.success('Checked out successfully');
       fetchTasks();
     } catch (error) {
