@@ -61,7 +61,16 @@ export default function Tasks() {
     try {
       const now = new Date().toISOString();
       const task = tasks.find(t => t.id === taskId);
-      if (!task) return;
+      if (!task) {
+        toast.error('Task not found');
+        return;
+      }
+
+      // Check if the task is assigned to the current user
+      if (task.assigned_to !== user?.id) {
+        toast.error('You are not authorized to update this task');
+        return;
+      }
 
       let updates: any = {
         status: newStatus,
@@ -74,8 +83,8 @@ export default function Tasks() {
           updates.started_at = now;
         } else if (task.last_pause_at) {
           // Calculate additional pause duration if resuming
-          const pauseDuration = new Date(now).getTime() - new Date(task.last_pause_at).getTime();
-          updates.total_pause_duration = (task.total_pause_duration || 0) + pauseDuration;
+          const pauseDuration = Math.max(0, new Date(now).getTime() - new Date(task.last_pause_at).getTime());
+          updates.total_pause_duration = Math.floor((task.total_pause_duration || 0) + pauseDuration);
           updates.last_pause_at = null;
         }
       } else if (newStatus === 'Paused') {
@@ -85,9 +94,14 @@ export default function Tasks() {
       const { error } = await supabase
         .from('tasks')
         .update(updates)
-        .eq('id', taskId);
+        .eq('id', taskId)
+        .eq('assigned_to', user?.id); // Additional security check
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase update error:', error);
+        toast.error(error.message || 'Failed to update task status');
+        return;
+      }
 
       setTasks(prev =>
         prev.map(t => (t.id === taskId ? { ...t, ...updates } : t))
