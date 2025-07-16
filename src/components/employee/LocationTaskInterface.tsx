@@ -163,11 +163,7 @@ export default function LocationTaskInterface() {
               // Save the browser-obtained location
               await LocationService.saveLocation(user!.id, {
                 latitude: position.coords.latitude,
-                longitude: position.coords.longitude,
-                accuracy: position.coords.accuracy,
-                timestamp: new Date().toISOString(),
-                battery_level: await LocationService.getBatteryLevel(),
-                connection_status: navigator.onLine ? 'online' : 'offline'
+                longitude: position.coords.longitude
               });
 
               // Set current location

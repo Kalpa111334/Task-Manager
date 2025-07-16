@@ -42,6 +42,11 @@ interface EmployeeLocation {
   };
 }
 
+interface Location {
+  latitude: number;
+  longitude: number;
+}
+
 export default function EmployeeTracking() {
   const { isLoaded, loadError } = useGoogleMaps();
   const [locations, setLocations] = useState<EmployeeLocation[]>([]);
@@ -70,6 +75,12 @@ export default function EmployeeTracking() {
       console.error('Error fetching locations:', error);
     }
   }, []);
+
+  const handleLocationUpdate = (location: Location) => {
+    // This function is not used in the current code, but it's part of the edit hint.
+    // If it were used, it would likely involve updating the 'locations' state
+    // with the new location, and potentially re-fitting the map bounds.
+  };
 
   useEffect(() => {
     // Start tracking current user's location if they are an employee

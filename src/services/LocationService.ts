@@ -1,5 +1,16 @@
 import { supabase } from '../lib/supabase';
 
+// Add battery interface at the top
+interface Battery {
+  level: number;
+  addEventListener: (type: string, listener: () => void) => void;
+  removeEventListener: (type: string, listener: () => void) => void;
+}
+
+interface NavigatorWithBattery extends Navigator {
+  getBattery?: () => Promise<Battery>;
+}
+
 export interface LocationData {
   latitude: number;
   longitude: number;
@@ -14,7 +25,7 @@ export class LocationService {
   private static trackingInterval: NodeJS.Timeout | null = null;
   private static lastLocation: { latitude: number; longitude: number } | null = null;
   private static minimumDistanceThreshold = 10; // meters
-  private static batteryManager: any | null = null;
+  private static batteryManager: Battery | null = null;
 
   static async getEmployeeLocations() {
     try {
@@ -33,9 +44,11 @@ export class LocationService {
     try {
       // Get battery information if available
       let batteryLevel = null;
-      if (navigator.getBattery) {
-        const battery = await navigator.getBattery();
-        batteryLevel = Math.round(battery.level * 100);
+      if ((navigator as NavigatorWithBattery).getBattery) {
+        const battery = await (navigator as NavigatorWithBattery).getBattery?.();
+        if (battery) {
+          batteryLevel = Math.round(battery.level * 100);
+        }
       }
 
       // Check if we should update based on distance threshold
@@ -101,10 +114,12 @@ export class LocationService {
     window.addEventListener('offline', () => this.handleConnectivityChange(userId, false));
 
     // Set up battery monitoring if available
-    if (navigator.getBattery) {
-      navigator.getBattery().then(battery => {
-        this.batteryManager = battery;
-        battery.addEventListener('levelchange', () => this.handleBatteryChange(userId));
+    if ((navigator as NavigatorWithBattery).getBattery) {
+      (navigator as NavigatorWithBattery).getBattery?.().then(battery => {
+        if (battery) {
+          this.batteryManager = battery;
+          battery.addEventListener('levelchange', () => this.handleBatteryChange(userId));
+        }
       });
     }
 
@@ -173,6 +188,38 @@ export class LocationService {
       if (error) throw error;
     } catch (error) {
       console.error('Error updating battery level:', error);
+    }
+  }
+
+  static async getBatteryLevel(): Promise<number | null> {
+    try {
+      if ((navigator as NavigatorWithBattery).getBattery) {
+        const battery = await (navigator as NavigatorWithBattery).getBattery?.();
+        return battery ? Math.round(battery.level * 100) : null;
+      }
+      return null;
+    } catch (error) {
+      console.error('Error getting battery level:', error);
+      return null;
+    }
+  }
+
+  static async saveLocation(userId: string, location: { latitude: number; longitude: number }): Promise<void> {
+    try {
+      const batteryLevel = await this.getBatteryLevel();
+      await supabase
+        .from('employee_locations')
+        .insert({
+          user_id: userId,
+          latitude: location.latitude,
+          longitude: location.longitude,
+          timestamp: new Date().toISOString(),
+          battery_level: batteryLevel,
+          connection_status: navigator.onLine ? 'online' : 'offline',
+        });
+    } catch (error) {
+      console.error('Error saving location:', error);
+      throw error;
     }
   }
 }
