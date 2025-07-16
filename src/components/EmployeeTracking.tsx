@@ -4,6 +4,11 @@ import { LocationService } from '../services/LocationService';
 import { useAuth } from '../contexts/AuthContext';
 import { useGoogleMaps } from './GoogleMapsLoader';
 
+interface Location {
+  latitude: number;
+  longitude: number;
+}
+
 const mapContainerStyle = {
   width: '100%',
   height: '70vh',
@@ -61,7 +66,7 @@ export default function EmployeeTracking() {
       // If we have locations, fit the map bounds to include all markers
       if (data.length > 0 && mapRef.current) {
         const bounds = new window.google.maps.LatLngBounds();
-        data.forEach((location) => {
+        data.forEach((location: Location) => {
           bounds.extend({ lat: location.latitude, lng: location.longitude });
         });
         mapRef.current.fitBounds(bounds);
