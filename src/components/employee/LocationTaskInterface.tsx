@@ -307,14 +307,14 @@ export default function LocationTaskInterface() {
         p_task_id: task.id,
         p_user_id: user.id,
         p_timestamp: now
-      });
+        });
 
       if (error) {
         console.error('Error in check-out transaction:', error);
         toast.error(error.message || 'Failed to record check-out event');
         return;
       }
-
+      
       toast.success('Checked out successfully');
       fetchTasks();
     } catch (error) {

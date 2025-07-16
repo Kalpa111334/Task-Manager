@@ -197,6 +197,8 @@ export default function GeofenceManager({ onGeofenceSelect, selectedGeofenceId }
                   type="number"
                   required
                   min="10"
+                  title="Radius in meters"
+                  placeholder="Enter radius in meters"
                   max="10000"
                   value={formData.radius_meters}
                   onChange={(e) => setFormData(prev => ({ ...prev, radius_meters: parseInt(e.target.value) }))}
@@ -232,6 +234,7 @@ export default function GeofenceManager({ onGeofenceSelect, selectedGeofenceId }
                   <button
                     type="button"
                     onClick={getCurrentLocation}
+                    title="Get current location"
                     className="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 text-gray-500 text-sm hover:bg-gray-100"
                   >
                     <MapIcon className="h-4 w-4" />

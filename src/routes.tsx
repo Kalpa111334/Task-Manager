@@ -13,6 +13,7 @@ import Chat from './pages/Chat';
 import Reports from './pages/admin/Reports';
 import TaskPool from './pages/admin/TaskPool';
 import LocationDashboard from './pages/admin/LocationDashboard';
+import EmployeeTrackingMap from './components/EmployeeTrackingMap';
 
 // Employee Pages
 import EmployeeDashboard from './pages/employee/Dashboard';
@@ -39,6 +40,7 @@ export default function AppRoutes() {
             <Route path="tasks/pool" element={<TaskPool />} />
             <Route path="tasks/create" element={<CreateTask />} />
             <Route path="tasks/:taskId" element={<TaskView />} />
+            <Route path="tracking" element={<EmployeeTrackingMap />} />
             <Route path="reports" element={<Reports />} />
             <Route path="analytics" element={<Analytics />} />
             <Route path="team" element={<Team />} />

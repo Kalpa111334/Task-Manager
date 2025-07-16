@@ -53,6 +53,7 @@ export default function Layout({ children }: LayoutProps) {
         { name: 'Dashboard', href: '/admin/dashboard', icon: ViewGridIcon },
         { name: 'Tasks', href: '/admin/tasks', icon: ViewListIcon },
         { name: 'Task Pool', href: '/admin/tasks/pool', icon: InboxIcon },
+        { name: 'Employee Tracking', href: '/admin/tracking', icon: LocationMarkerIcon },
         { name: 'Location Management', href: '/admin/location', icon: MapIcon },
         { name: 'Reports', href: '/admin/reports', icon: DocumentReportIcon },
         { name: 'Analytics', href: '/admin/analytics', icon: ChartBarIcon },

@@ -11,250 +11,168 @@ export interface LocationData {
 }
 
 export class LocationService {
-  private static watchId: number | null = null;
-  private static isTracking = false;
-  private static currentUserId: string | null = null;
+  private static trackingInterval: NodeJS.Timeout | null = null;
+  private static lastLocation: { latitude: number; longitude: number } | null = null;
+  private static minimumDistanceThreshold = 10; // meters
+  private static batteryManager: any | null = null;
 
-  static async startTracking(userId: string): Promise<void> {
-    if (this.isTracking) {
-      console.log('Location tracking already active');
-      return;
+  static async getEmployeeLocations() {
+    try {
+      const { data, error } = await supabase
+        .rpc('get_latest_employee_locations');
+
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching employee locations:', error);
+      throw error;
     }
+  }
 
-    this.currentUserId = userId;
-    this.isTracking = true;
+  private static async updateLocation(userId: string, position: GeolocationPosition) {
+    try {
+      // Get battery information if available
+      let batteryLevel = null;
+      if (navigator.getBattery) {
+        const battery = await navigator.getBattery();
+        batteryLevel = Math.round(battery.level * 100);
+      }
 
+      // Check if we should update based on distance threshold
+      if (this.lastLocation) {
+        const distance = this.calculateDistance(
+          this.lastLocation.latitude,
+          this.lastLocation.longitude,
+          position.coords.latitude,
+          position.coords.longitude
+        );
+        
+        if (distance < this.minimumDistanceThreshold) {
+          return; // Skip update if movement is below threshold
+        }
+      }
+
+      const { error } = await supabase
+        .from('employee_locations')
+        .insert({
+          user_id: userId,
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          timestamp: new Date().toISOString(),
+          battery_level: batteryLevel,
+          connection_status: navigator.onLine ? 'online' : 'offline',
+          location_accuracy: position.coords.accuracy,
+        });
+
+      if (error) throw error;
+
+      this.lastLocation = {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+      };
+    } catch (error) {
+      console.error('Error updating location:', error);
+      throw error;
+    }
+  }
+
+  private static calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const R = 6371e3; // Earth's radius in meters
+    const φ1 = lat1 * Math.PI / 180;
+    const φ2 = lat2 * Math.PI / 180;
+    const Δφ = (lat2 - lat1) * Math.PI / 180;
+    const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ/2) * Math.sin(Δλ/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+    return R * c;
+  }
+
+  static startTracking(userId: string) {
     if (!navigator.geolocation) {
       throw new Error('Geolocation is not supported by this browser');
     }
 
-    const options = {
-      enableHighAccuracy: true,
-      timeout: 10000,
-      maximumAge: 60000, // 1 minute
-    };
+    // Set up online/offline status monitoring
+    window.addEventListener('online', () => this.handleConnectivityChange(userId, true));
+    window.addEventListener('offline', () => this.handleConnectivityChange(userId, false));
 
-    this.watchId = navigator.geolocation.watchPosition(
-      (position) => this.handleLocationUpdate(position),
-      (error) => this.handleLocationError(error),
-      options
+    // Set up battery monitoring if available
+    if (navigator.getBattery) {
+      navigator.getBattery().then(battery => {
+        this.batteryManager = battery;
+        battery.addEventListener('levelchange', () => this.handleBatteryChange(userId));
+      });
+    }
+
+    // Start location tracking
+    const watchId = navigator.geolocation.watchPosition(
+      (position) => this.updateLocation(userId, position),
+      (error) => {
+        console.error('Error getting location:', error);
+        throw error;
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 10000,
+      }
     );
 
-    // Also send initial location
-    navigator.geolocation.getCurrentPosition(
-      (position) => this.handleLocationUpdate(position),
-      (error) => console.warn('Initial location failed:', error),
-      options
-    );
-
-    console.log('Location tracking started for user:', userId);
+    // Store watch ID for cleanup
+    return watchId;
   }
 
-  static stopTracking(): void {
-    if (this.watchId !== null) {
-      navigator.geolocation.clearWatch(this.watchId);
-      this.watchId = null;
+  static stopTracking() {
+    if (this.trackingInterval) {
+      clearInterval(this.trackingInterval);
+      this.trackingInterval = null;
     }
-    this.isTracking = false;
-    this.currentUserId = null;
-    console.log('Location tracking stopped');
+
+    // Remove event listeners
+    window.removeEventListener('online', () => {});
+    window.removeEventListener('offline', () => {});
+
+    if (this.batteryManager) {
+      this.batteryManager.removeEventListener('levelchange', () => {});
+      this.batteryManager = null;
+    }
+
+    this.lastLocation = null;
   }
 
-  private static async handleLocationUpdate(position: GeolocationPosition): Promise<void> {
-    if (!this.currentUserId) return;
-
-    const locationData: LocationData = {
-      latitude: position.coords.latitude,
-      longitude: position.coords.longitude,
-      accuracy: position.coords.accuracy,
-      timestamp: new Date().toISOString(),
-      battery_level: await this.getBatteryLevel(),
-      connection_status: navigator.onLine ? 'online' : 'offline',
-    };
-
+  private static async handleConnectivityChange(userId: string, isOnline: boolean) {
     try {
-      await this.saveLocation(this.currentUserId, locationData);
-    } catch (error) {
-      console.error('Failed to save location:', error);
-    }
-  }
-
-  private static handleLocationError(error: GeolocationPositionError): void {
-    console.error('Location error:', error.message);
-    
-    switch (error.code) {
-      case error.PERMISSION_DENIED:
-        console.error('Location access denied by user');
-        break;
-      case error.POSITION_UNAVAILABLE:
-        console.error('Location information unavailable');
-        break;
-      case error.TIMEOUT:
-        console.error('Location request timed out');
-        break;
-    }
-  }
-
-  static async getBatteryLevel(): Promise<number | undefined> {
-    try {
-      // Check if Battery Status API is supported
-      if ('getBattery' in navigator) {
-        const battery = await (navigator as any).getBattery();
-        return Math.round(battery.level * 100);
-      }
-      return undefined;
-    } catch (error) {
-      console.warn('Could not retrieve battery level:', error);
-      return undefined;
-    }
-  }
-
-  static async saveLocation(userId: string, locationData: LocationData): Promise<void> {
-    const { error } = await supabase
-      .from('employee_locations')
-      .insert({
-        user_id: userId,
-        latitude: locationData.latitude,
-        longitude: locationData.longitude,
-        timestamp: locationData.timestamp,
-        battery_level: locationData.battery_level,
-        connection_status: locationData.connection_status,
-        location_accuracy: locationData.accuracy,
-        task_id: locationData.task_id,
-      });
-
-    if (error) {
-      throw error;
-    }
-  }
-
-  static async getEmployeeLocations(): Promise<any[]> {
-    try {
-      // First, get all employee locations
-      const { data: locations, error: locationsError } = await supabase
+      const { error } = await supabase
         .from('employee_locations')
-        .select('*')
-        .order('timestamp', { ascending: false });
-
-      if (locationsError) {
-        throw locationsError;
-      }
-
-      if (!locations || locations.length === 0) {
-        return [];
-      }
-
-      // Get unique user IDs
-      const userIds = [...new Set(locations.map(loc => loc.user_id))];
-
-      // Fetch user data separately
-      const { data: users, error: usersError } = await supabase
-        .from('users')
-        .select('id, full_name, avatar_url')
-        .in('id', userIds);
-
-      if (usersError) {
-        throw usersError;
-      }
-
-      // Create a map of users for quick lookup
-      const userMap = new Map(users?.map(user => [user.id, user]) || []);
-
-      // Get the latest location for each user and attach user data
-      const latestLocations = new Map();
-      locations.forEach((location) => {
-        if (!latestLocations.has(location.user_id) || 
-            new Date(location.timestamp) > new Date(latestLocations.get(location.user_id).timestamp)) {
-          const userData = userMap.get(location.user_id);
-          latestLocations.set(location.user_id, {
-            ...location,
-            users: userData || { full_name: 'Unknown User', avatar_url: null }
-          });
-        }
-      });
-
-      return Array.from(latestLocations.values());
-    } catch (error) {
-      console.error('Error in getEmployeeLocations:', error);
-      throw error;
-    }
-  }
-
-  static async getUserLocation(userId: string): Promise<any | null> {
-    try {
-      // Get the latest location for the user
-      const { data: location, error: locationError } = await supabase
-        .from('employee_locations')
-        .select('*')
+        .update({ connection_status: isOnline ? 'online' : 'offline' })
         .eq('user_id', userId)
         .order('timestamp', { ascending: false })
-        .limit(1)
-        .single();
+        .limit(1);
 
-      // Log detailed error information
-      if (locationError) {
-        console.error('Location retrieval error:', {
-          code: locationError.code,
-          message: locationError.message,
-          details: locationError.details
-        });
-
-        // Only throw if it's not a "no rows" error
-        if (locationError.code !== 'PGRST116') {
-          throw locationError;
-        }
-      }
-
-      if (!location) {
-        console.warn(`No location found for user ${userId}`);
-        return null;
-      }
-
-      // Get user data separately
-      const { data: user, error: userError } = await supabase
-        .from('users')
-        .select('id, full_name, avatar_url')
-        .eq('id', userId)
-        .single();
-
-      if (userError) {
-        console.error('User retrieval error:', {
-          code: userError.code,
-          message: userError.message,
-          details: userError.details
-        });
-        throw userError;
-      }
-
-      return {
-        ...location,
-        users: user || { full_name: 'Unknown User', avatar_url: null }
-      };
+      if (error) throw error;
     } catch (error) {
-      console.error('Comprehensive error in getUserLocation:', {
-        userId,
-        errorMessage: error instanceof Error ? error.message : String(error),
-        errorStack: error instanceof Error ? error.stack : 'No stack trace'
-      });
-      throw error;
+      console.error('Error updating connectivity status:', error);
     }
   }
 
-  static async getLocationHistory(userId: string, hours: number = 24): Promise<any[]> {
-    const since = new Date();
-    since.setHours(since.getHours() - hours);
+  private static async handleBatteryChange(userId: string) {
+    if (!this.batteryManager) return;
 
-    const { data, error } = await supabase
-      .from('employee_locations')
-      .select('*')
-      .eq('user_id', userId)
-      .gte('timestamp', since.toISOString())
-      .order('timestamp', { ascending: true });
+    try {
+      const { error } = await supabase
+        .from('employee_locations')
+        .update({ battery_level: Math.round(this.batteryManager.level * 100) })
+        .eq('user_id', userId)
+        .order('timestamp', { ascending: false })
+        .limit(1);
 
-    if (error) {
-      throw error;
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error updating battery level:', error);
     }
-
-    return data || [];
   }
 }
