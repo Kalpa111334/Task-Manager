@@ -42,11 +42,6 @@ interface EmployeeLocation {
   };
 }
 
-interface Location {
-  latitude: number;
-  longitude: number;
-}
-
 export default function EmployeeTracking() {
   const { isLoaded, loadError } = useGoogleMaps();
   const [locations, setLocations] = useState<EmployeeLocation[]>([]);
@@ -76,7 +71,7 @@ export default function EmployeeTracking() {
     }
   }, []);
 
-  const handleLocationUpdate = (location: Location) => {
+  const handleLocationUpdate = (location: { latitude: number; longitude: number }) => {
     // This function is not used in the current code, but it's part of the edit hint.
     // If it were used, it would likely involve updating the 'locations' state
     // with the new location, and potentially re-fitting the map bounds.
@@ -85,9 +80,21 @@ export default function EmployeeTracking() {
   useEffect(() => {
     // Start tracking current user's location if they are an employee
     if (user && user.role === 'employee') {
-      LocationService.startTracking(user.id);
+      const watchId = LocationService.startTracking(user.id);
+
+      const handleLocationUpdate = (position: GeolocationPosition) => {
+        const location = {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude
+        };
+        // Handle location update
+      };
+
       return () => {
         LocationService.stopTracking();
+        if (watchId) {
+          navigator.geolocation.clearWatch(watchId);
+        }
       };
     }
   }, [user]);
