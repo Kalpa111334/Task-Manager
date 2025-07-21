@@ -3,10 +3,23 @@ import { GoogleMap, Marker, InfoWindow } from '@react-google-maps/api';
 import { LocationService } from '../services/LocationService';
 import { useAuth } from '../contexts/AuthContext';
 import { useGoogleMaps } from './GoogleMapsLoader';
+import toast from 'react-hot-toast';
 
 interface Location {
   latitude: number;
   longitude: number;
+  timestamp?: string;
+  user_id?: string;
+  accuracy?: number;
+  speed?: number;
+  heading?: number;
+}
+
+interface EmployeeLocation extends Location {
+  user_id: string;
+  full_name?: string;
+  avatar_url?: string;
+  last_updated?: string;
 }
 
 const mapContainerStyle = {
@@ -14,38 +27,12 @@ const mapContainerStyle = {
   height: '70vh',
 };
 
-const center = {
-  lat: 7.8731,
-  lng: 80.7718, // Center of Sri Lanka
+const defaultCenter = {
+  lat: 0,
+  lng: 0,
 };
 
-const options = {
-  disableDefaultUI: false,
-  zoomControl: true,
-  styles: [
-    {
-      featureType: "all",
-      elementType: "labels",
-      stylers: [{ visibility: "on" }],
-    }
-  ],
-};
-
-interface EmployeeLocation {
-  id: string;
-  latitude: number;
-  longitude: number;
-  user_id: string;
-  timestamp: string;
-  battery_level?: number;
-  connection_status?: string;
-  task_id?: string;
-  location_accuracy?: number;
-  users: {
-    full_name: string;
-    avatar_url: string;
-  };
-}
+const defaultZoom = 15;
 
 export default function EmployeeTracking() {
   const { isLoaded, loadError } = useGoogleMaps();
@@ -53,106 +40,172 @@ export default function EmployeeTracking() {
   const [selectedLocation, setSelectedLocation] = useState<EmployeeLocation | null>(null);
   const { user } = useAuth();
   const mapRef = useRef<google.maps.Map>();
+  const markersRef = useRef<{ [key: string]: google.maps.Marker }>({});
+  const [isTracking, setIsTracking] = useState(true);
+
+  // Function to format timestamp to local time
+  const formatTime = (timestamp: string) => {
+    return new Date(timestamp).toLocaleTimeString();
+  };
+
+  // Function to calculate time difference
+  const getTimeDifference = (timestamp: string | undefined | null) => {
+    if (!timestamp) return 'No update yet';
+    
+    try {
+      const date = new Date(timestamp);
+      if (isNaN(date.getTime())) return 'Invalid timestamp';
+
+      const diff = Date.now() - date.getTime();
+      const minutes = Math.floor(diff / 60000);
+      
+      if (minutes < 1) return 'Just now';
+      if (minutes === 1) return '1 minute ago';
+      if (minutes < 60) return `${minutes} minutes ago`;
+      
+      const hours = Math.floor(minutes / 60);
+      if (hours === 1) return '1 hour ago';
+      if (hours < 24) return `${hours} hours ago`;
+      
+      const days = Math.floor(hours / 24);
+      if (days === 1) return 'Yesterday';
+      if (days < 7) return `${days} days ago`;
+      
+      return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+    } catch (error) {
+      console.error('Error formatting timestamp:', error);
+      return 'Invalid date format';
+    }
+  };
 
   const onMapLoad = useCallback((map: google.maps.Map) => {
     mapRef.current = map;
   }, []);
 
+  // Enhanced location fetching with real-time updates
   const fetchLocations = useCallback(async () => {
     try {
       const data = await LocationService.getEmployeeLocations();
-      setLocations(data);
+      // Add timestamp if not present
+      const locationsWithTimestamp = data.map(location => ({
+        ...location,
+        last_updated: location.last_updated || new Date().toISOString()
+      }));
+      setLocations(locationsWithTimestamp);
 
-      // If we have locations, fit the map bounds to include all markers
-      if (data.length > 0 && mapRef.current) {
-        const bounds = new window.google.maps.LatLngBounds();
-        data.forEach((location: Location) => {
-          bounds.extend({ lat: location.latitude, lng: location.longitude });
+      if (locationsWithTimestamp.length > 0) {
+        // Update or create markers for each location
+        locationsWithTimestamp.forEach((location: EmployeeLocation) => {
+          const position = { lat: location.latitude, lng: location.longitude };
+          
+          if (markersRef.current[location.user_id]) {
+            // Update existing marker position with animation
+            markersRef.current[location.user_id].setPosition(position);
+          } else {
+            // Create new marker
+            const marker = new google.maps.Marker({
+              position,
+              map: mapRef.current,
+              title: location.full_name || 'Employee',
+              animation: google.maps.Animation.DROP
+            });
+            markersRef.current[location.user_id] = marker;
+          }
         });
-        mapRef.current.fitBounds(bounds);
+
+        // Remove markers for employees no longer in the data
+        Object.keys(markersRef.current).forEach(userId => {
+          if (!data.find(loc => loc.user_id === userId)) {
+            markersRef.current[userId].setMap(null);
+            delete markersRef.current[userId];
+          }
+        });
+
+        // Auto-zoom to fit all markers if tracking is enabled
+        if (isTracking && mapRef.current) {
+          const bounds = new google.maps.LatLngBounds();
+          data.forEach((location: Location) => {
+            bounds.extend({ lat: location.latitude, lng: location.longitude });
+          });
+          mapRef.current.fitBounds(bounds);
+          
+          // If only one location, zoom in closer
+          if (data.length === 1) {
+            mapRef.current.setZoom(18);
+          }
+        }
       }
     } catch (error) {
       console.error('Error fetching locations:', error);
+      toast.error('Failed to fetch employee locations');
+    }
+  }, [isTracking]);
+
+  // Set up real-time updates
+  useEffect(() => {
+    fetchLocations();
+    const interval = setInterval(fetchLocations, 10000); // Update every 10 seconds
+
+    return () => {
+      clearInterval(interval);
+      // Clean up markers
+      Object.values(markersRef.current).forEach(marker => marker.setMap(null));
+      markersRef.current = {};
+    };
+  }, [fetchLocations]);
+
+  // Handle marker click
+  const handleMarkerClick = useCallback((location: EmployeeLocation) => {
+    setSelectedLocation(location);
+    if (mapRef.current) {
+      mapRef.current.panTo({ lat: location.latitude, lng: location.longitude });
+      mapRef.current.setZoom(19); // Zoom in closer to show detail
     }
   }, []);
 
-  const handleLocationUpdate = (location: { latitude: number; longitude: number }) => {
-    // This function is not used in the current code, but it's part of the edit hint.
-    // If it were used, it would likely involve updating the 'locations' state
-    // with the new location, and potentially re-fitting the map bounds.
-  };
+  if (loadError) {
+    return <div className="text-red-500">Error loading maps</div>;
+  }
 
-  useEffect(() => {
-    // Start tracking current user's location if they are an employee
-    if (user && user.role === 'employee') {
-      const watchId = LocationService.startTracking(user.id);
-
-      const handleLocationUpdate = (position: GeolocationPosition) => {
-        const location = {
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude
-        };
-        // Handle location update
-      };
-
-      return () => {
-        LocationService.stopTracking();
-        if (watchId) {
-          navigator.geolocation.clearWatch(watchId);
-        }
-      };
-    }
-  }, [user]);
-
-  useEffect(() => {
-    // Fetch locations initially and then every 30 seconds
-    fetchLocations();
-    const interval = setInterval(fetchLocations, 30000);
-
-    return () => clearInterval(interval);
-  }, [fetchLocations]);
-
-  if (loadError) return <div className="p-4 text-red-600">Error loading maps</div>;
-  if (!isLoaded) return <div className="p-4">Loading maps...</div>;
+  if (!isLoaded) {
+    return <div className="flex justify-center items-center h-screen">Loading maps...</div>;
+  }
 
   return (
     <div className="p-4">
-      <h2 className="text-2xl font-bold mb-4">Field Employee Tracking</h2>
-      <div className="mb-4">
-        <div className="flex space-x-4">
-          <div className="flex items-center">
-            <div className="w-3 h-3 rounded-full bg-green-500 mr-2"></div>
-            <span>Online</span>
-          </div>
-          <div className="flex items-center">
-            <div className="w-3 h-3 rounded-full bg-red-500 mr-2"></div>
-            <span>Offline</span>
-          </div>
-        </div>
+      <div className="mb-4 flex justify-between items-center">
+        <h2 className="text-2xl font-bold">Employee Tracking</h2>
+        <button
+          onClick={() => setIsTracking(!isTracking)}
+          className={`px-4 py-2 rounded ${
+            isTracking ? 'bg-green-500' : 'bg-gray-500'
+          } text-white`}
+        >
+          {isTracking ? 'Tracking Active' : 'Tracking Paused'}
+        </button>
       </div>
-      
-      <div className="rounded-lg overflow-hidden border border-gray-200">
+
+      <div className="relative">
         <GoogleMap
           mapContainerStyle={mapContainerStyle}
-          zoom={17}
-          center={center}
-          options={options}
+          center={defaultCenter}
+          zoom={defaultZoom}
           onLoad={onMapLoad}
+          options={{
+            zoomControl: true,
+            streetViewControl: false,
+            mapTypeControl: true,
+            fullscreenControl: true,
+          }}
         >
           {locations.map((location) => (
             <Marker
-              key={location.id}
+              key={location.user_id}
               position={{
                 lat: location.latitude,
                 lng: location.longitude,
               }}
-              icon={{
-                url: location.connection_status === 'online' 
-                  ? 'https://maps.google.com/mapfiles/ms/icons/green-dot.png'
-                  : 'https://maps.google.com/mapfiles/ms/icons/red-dot.png',
-                scaledSize: new window.google.maps.Size(40, 40),
-              }}
-              onClick={() => setSelectedLocation(location)}
+              onClick={() => handleMarkerClick(location)}
             />
           ))}
 
@@ -165,33 +218,35 @@ export default function EmployeeTracking() {
               onCloseClick={() => setSelectedLocation(null)}
             >
               <div className="p-2 max-w-xs">
-                <div className="flex items-center mb-2">
-                  <img
-                    src={selectedLocation.users.avatar_url || `https://ui-avatars.com/api/?name=${selectedLocation.users.full_name}`}
-                    alt={selectedLocation.users.full_name}
-                    className="w-10 h-10 rounded-full mr-2"
-                  />
-                  <div>
-                    <h3 className="font-semibold">{selectedLocation.users.full_name}</h3>
-                    <p className="text-sm text-gray-600">
-                      {new Date(selectedLocation.timestamp).toLocaleString()}
-                    </p>
-                  </div>
-                </div>
+                <h3 className="font-bold mb-2">{selectedLocation.full_name || 'Employee'}</h3>
                 <div className="text-sm">
                   <p className="mb-1">
-                    Status: <span className={`font-semibold ${selectedLocation.connection_status === 'online' ? 'text-green-600' : 'text-red-600'}`}>
-                      {selectedLocation.connection_status}
-                    </span>
+                    <strong>Last Updated:</strong>{' '}
+                    {getTimeDifference(selectedLocation.last_updated)}
                   </p>
-                  {selectedLocation.battery_level && (
+                  <p className="mb-1">
+                    <strong>Exact Time:</strong>{' '}
+                    {selectedLocation.last_updated 
+                      ? new Date(selectedLocation.last_updated).toLocaleString()
+                      : 'No update time available'}
+                  </p>
+                  <p className="mb-1">
+                    <strong>Coordinates:</strong>{' '}
+                    {selectedLocation.latitude.toFixed(6)}, {selectedLocation.longitude.toFixed(6)}
+                  </p>
+                  {selectedLocation.accuracy && (
                     <p className="mb-1">
-                      Battery: <span className="font-semibold">{selectedLocation.battery_level}%</span>
+                      <strong>Accuracy:</strong> ±{selectedLocation.accuracy.toFixed(1)}m
                     </p>
                   )}
-                  {selectedLocation.location_accuracy && (
+                  {selectedLocation.speed && (
                     <p className="mb-1">
-                      Accuracy: <span className="font-semibold">{Math.round(selectedLocation.location_accuracy)}m</span>
+                      <strong>Speed:</strong> {(selectedLocation.speed * 3.6).toFixed(1)} km/h
+                    </p>
+                  )}
+                  {selectedLocation.heading && (
+                    <p>
+                      <strong>Heading:</strong> {selectedLocation.heading.toFixed(0)}°
                     </p>
                   )}
                 </div>
@@ -199,6 +254,42 @@ export default function EmployeeTracking() {
             </InfoWindow>
           )}
         </GoogleMap>
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {locations.map((location) => (
+          <div
+            key={location.user_id}
+            className="bg-white p-4 rounded-lg shadow cursor-pointer hover:bg-gray-50"
+            onClick={() => handleMarkerClick(location)}
+          >
+            <div className="flex items-center mb-2">
+              {location.avatar_url && (
+                <img
+                  src={location.avatar_url}
+                  alt={location.full_name || 'Employee'}
+                  className="w-10 h-10 rounded-full mr-3"
+                />
+              )}
+              <div>
+                <h3 className="font-bold">{location.full_name || 'Employee'}</h3>
+                <p className="text-sm text-gray-500">
+                  {location.last_updated
+                    ? getTimeDifference(location.last_updated)
+                    : 'Last update unknown'}
+                </p>
+              </div>
+            </div>
+            <div className="text-sm">
+              <p className="mb-1">
+                Lat: {location.latitude.toFixed(6)}, Lng: {location.longitude.toFixed(6)}
+              </p>
+              {location.accuracy && (
+                <p className="text-gray-600">Accuracy: ±{location.accuracy.toFixed(1)}m</p>
+              )}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
