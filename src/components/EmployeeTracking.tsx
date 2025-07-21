@@ -87,7 +87,7 @@ export default function EmployeeTracking() {
     try {
       const data = await LocationService.getEmployeeLocations();
       // Add timestamp if not present
-      const locationsWithTimestamp = data.map(location => ({
+      const locationsWithTimestamp = data.map((location: EmployeeLocation) => ({
         ...location,
         last_updated: location.last_updated || new Date().toISOString()
       }));
@@ -115,7 +115,7 @@ export default function EmployeeTracking() {
 
         // Remove markers for employees no longer in the data
         Object.keys(markersRef.current).forEach(userId => {
-          if (!data.find(loc => loc.user_id === userId)) {
+          if (!locationsWithTimestamp.find((loc: EmployeeLocation) => loc.user_id === userId)) {
             markersRef.current[userId].setMap(null);
             delete markersRef.current[userId];
           }
