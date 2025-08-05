@@ -16,9 +16,9 @@ interface EnhancedTaskFormProps {
 
 interface TaskLocation {
   id?: string;
-  geofence_id?: string;
-  latitude?: number;
-  longitude?: number;
+  geofence_id: string | null;
+  latitude: number | null;
+  longitude: number | null;
   radius_meters: number;
   arrival_required: boolean;
   departure_required: boolean;
@@ -144,18 +144,31 @@ export default function EnhancedTaskForm({ onSubmit, initialData, isEdit = false
   };
 
   const handleGeofenceChange = (index: number, geofenceId: string) => {
+    const newLocations = [...locations];
     if (geofenceId) {
       const geofence = geofences.find(g => g.id === geofenceId);
       if (geofence) {
-        const newLocations = [...locations];
         newLocations[index] = {
           ...newLocations[index],
           geofence_id: geofenceId,
+          latitude: null,
+          longitude: null,
           radius_meters: geofence.radius_meters,
         };
-        setValue('locations', newLocations);
       }
+    } else {
+      newLocations[index] = {
+        ...newLocations[index],
+        geofence_id: null,
+        radius_meters: 100,
+      };
     }
+    setValue('locations', newLocations);
+    setLocationMethods(methods => {
+      const newMethods = [...methods];
+      newMethods[index] = 'geofence';
+      return newMethods;
+    });
   };
 
   const addLocation = () => {
@@ -216,8 +229,8 @@ export default function EnhancedTaskForm({ onSubmit, initialData, isEdit = false
 
       if (data.location_required) {
         const invalidLocations = data.locations.filter(loc => {
-          const hasGeofence = !!loc.geofence_id;
-          const hasCoordinates = typeof loc.latitude === 'number' && typeof loc.longitude === 'number';
+          const hasGeofence = loc.geofence_id !== null;
+          const hasCoordinates = loc.latitude !== null && loc.longitude !== null;
           return !hasGeofence && !hasCoordinates;
         });
 
