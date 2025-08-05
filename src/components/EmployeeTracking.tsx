@@ -4,6 +4,7 @@ import { LocationService } from '../services/LocationService';
 import { useAuth } from '../contexts/AuthContext';
 import { useGoogleMaps } from './GoogleMapsLoader';
 import toast from 'react-hot-toast';
+import { supabase } from '../lib/supabase';
 
 interface Location {
   latitude: number;
@@ -85,7 +86,27 @@ export default function EmployeeTracking() {
   // Enhanced location fetching with real-time updates
   const fetchLocations = useCallback(async () => {
     try {
+      // Check if user is authenticated
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error('Not authenticated');
+        return;
+      }
+
+      // Check if user is an admin
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', user.id)
+        .single();
+
+      if (userError || !userData || userData.role !== 'admin') {
+        toast.error('Access denied: Admin only');
+        return;
+      }
+
       const data = await LocationService.getEmployeeLocations();
+      
       // Add timestamp if not present
       const locationsWithTimestamp = data.map((location: EmployeeLocation) => ({
         ...location,
@@ -134,6 +155,8 @@ export default function EmployeeTracking() {
             mapRef.current.setZoom(18);
           }
         }
+      } else {
+        toast.error('No employee locations found');
       }
     } catch (error) {
       console.error('Error fetching locations:', error);
