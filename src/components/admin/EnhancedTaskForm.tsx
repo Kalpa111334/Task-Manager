@@ -4,12 +4,24 @@ import { supabase } from '../../lib/supabase';
 import { GeofencingService, Geofence } from '../../services/GeofencingService';
 import { User } from '../../types/index';
 import { formatCurrency, parseCurrencyInput } from '../../utils/currency';
-import { MapIcon, LocationMarkerIcon } from '@heroicons/react/outline';
+import { MapIcon, LocationMarkerIcon, PlusIcon, TrashIcon } from '@heroicons/react/outline';
+import MapLocationPicker from './MapLocationPicker';
+import toast from 'react-hot-toast';
 
 interface EnhancedTaskFormProps {
   onSubmit: (data: any) => void;
   initialData?: any;
   isEdit?: boolean;
+}
+
+interface TaskLocation {
+  id?: string;
+  geofence_id?: string;
+  latitude?: number;
+  longitude?: number;
+  radius_meters: number;
+  arrival_required: boolean;
+  departure_required: boolean;
 }
 
 interface FormInputs {
@@ -20,20 +32,7 @@ interface FormInputs {
   due_date: string;
   price: string;
   location_required: boolean;
-  location_latitude?: number;
-  location_longitude?: number;
-  location_radius_meters: number;
-  auto_check_in: boolean;
-  auto_check_out: boolean;
-  geofence_id?: string;
-  location_data?: {
-    geofence_id: string | null;
-    required_latitude: number | null;
-    required_longitude: number | null;
-    required_radius_meters: number;
-    arrival_required: boolean;
-    departure_required: boolean;
-  };
+  locations: TaskLocation[];
 }
 
 export default function EnhancedTaskForm({ onSubmit, initialData, isEdit = false }: EnhancedTaskFormProps) {
@@ -42,8 +41,10 @@ export default function EnhancedTaskForm({ onSubmit, initialData, isEdit = false
   const [priceInput, setPriceInput] = useState(
     initialData?.price ? formatCurrency(initialData.price) : 'Rs. 0'
   );
-  const [useCurrentLocation, setUseCurrentLocation] = useState(false);
   const [gettingLocation, setGettingLocation] = useState(false);
+  const [locationMethods, setLocationMethods] = useState<('geofence' | 'coordinates')[]>([]);
+  const [showMapPicker, setShowMapPicker] = useState(false);
+  const [activeLocationIndex, setActiveLocationIndex] = useState<number | null>(null);
 
   const {
     register,
@@ -57,15 +58,13 @@ export default function EnhancedTaskForm({ onSubmit, initialData, isEdit = false
       priority: 'Medium',
       price: 'Rs. 0',
       location_required: false,
-      location_radius_meters: 100,
-      auto_check_in: false,
-      auto_check_out: false,
+      locations: [],
       ...initialData,
     },
   });
 
   const locationRequired = watch('location_required');
-  const selectedGeofence = watch('geofence_id');
+  const locations = watch('locations') || [];
 
   useEffect(() => {
     fetchEmployees();
@@ -73,7 +72,23 @@ export default function EnhancedTaskForm({ onSubmit, initialData, isEdit = false
     if (initialData?.price) {
       setPriceInput(formatCurrency(initialData.price));
     }
+    // Initialize locations from task_locations if editing
+    if (isEdit && initialData?.id) {
+      fetchTaskLocations(initialData.id);
+    }
   }, [initialData]);
+
+  const fetchTaskLocations = async (taskId: string) => {
+    const { data, error } = await supabase.rpc('get_task_locations', { p_task_id: taskId });
+    if (error) {
+      console.error('Error fetching task locations:', error);
+      return;
+    }
+    if (data) {
+      setValue('locations', data);
+      setLocationMethods(data.map((loc: { geofence_id: string | null }) => loc.geofence_id ? 'geofence' : 'coordinates'));
+    }
+  };
 
   const fetchEmployees = async () => {
     const { data, error } = await supabase
@@ -105,67 +120,132 @@ export default function EnhancedTaskForm({ onSubmit, initialData, isEdit = false
     setValue('price', String(numericValue));
   };
 
-  const getCurrentLocation = async () => {
-    if (!navigator.geolocation) {
-      alert('Geolocation is not supported by this browser');
-      return;
-    }
-
-    setGettingLocation(true);
-    try {
-      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 60000,
-        });
+  const handleMapLocationSelect = (location: { lat: number; lng: number }) => {
+    if (activeLocationIndex !== null) {
+      const newLocations = [...locations];
+      newLocations[activeLocationIndex] = {
+        ...newLocations[activeLocationIndex],
+        geofence_id: null, // Clear geofence when coordinates are selected
+        latitude: location.lat,
+        longitude: location.lng,
+        radius_meters: newLocations[activeLocationIndex].radius_meters || 100,
+        arrival_required: newLocations[activeLocationIndex].arrival_required || false,
+        departure_required: newLocations[activeLocationIndex].departure_required || false,
+      };
+      setValue('locations', newLocations);
+      setLocationMethods(methods => {
+        const newMethods = [...methods];
+        newMethods[activeLocationIndex] = 'coordinates';
+        return newMethods;
       });
-
-      setValue('location_latitude', position.coords.latitude);
-      setValue('location_longitude', position.coords.longitude);
-      setUseCurrentLocation(true);
-    } catch (error) {
-      console.error('Error getting location:', error);
-      alert('Failed to get current location. Please enter coordinates manually.');
-    } finally {
-      setGettingLocation(false);
+      // Hide map picker after location is selected
+      setShowMapPicker(false);
     }
   };
 
-  const handleGeofenceChange = (geofenceId: string) => {
+  const handleGeofenceChange = (index: number, geofenceId: string) => {
     if (geofenceId) {
       const geofence = geofences.find(g => g.id === geofenceId);
       if (geofence) {
-        setValue('location_latitude', geofence.center_latitude);
-        setValue('location_longitude', geofence.center_longitude);
-        setValue('location_radius_meters', geofence.radius_meters);
+        const newLocations = [...locations];
+        newLocations[index] = {
+          ...newLocations[index],
+          geofence_id: geofenceId,
+          radius_meters: geofence.radius_meters,
+        };
+        setValue('locations', newLocations);
       }
     }
   };
 
-  const handleFormSubmit = async (data: FormInputs) => {
-    const formattedData = {
-      ...data,
-      price: parseCurrencyInput(priceInput),
-    };
+  const addLocation = () => {
+    const newLocations = [...locations, {
+      geofence_id: null,
+      latitude: null,
+      longitude: null,
+      radius_meters: 100,
+      arrival_required: true,
+      departure_required: false,
+    }];
+    setValue('locations', newLocations);
+    setLocationMethods([...locationMethods, 'coordinates']);
+    // Automatically show map picker for the new location
+    setActiveLocationIndex(locations.length);
+    setShowMapPicker(true);
+  };
 
-    // Create task location if location is required
-    if (data.location_required && (data.location_latitude || data.geofence_id)) {
-      formattedData.location_data = {
-        geofence_id: data.geofence_id || null,
-        required_latitude: data.location_latitude || null,
-        required_longitude: data.location_longitude || null,
-        required_radius_meters: data.location_radius_meters,
-        arrival_required: true,
-        departure_required: data.auto_check_out,
-      };
+  const removeLocation = (index: number) => {
+    const newLocations = locations.filter((_, i) => i !== index);
+    setValue('locations', newLocations);
+    setLocationMethods(locationMethods.filter((_, i) => i !== index));
+    if (activeLocationIndex === index) {
+      setActiveLocationIndex(null);
+      setShowMapPicker(false);
     }
+  };
 
-    onSubmit(formattedData);
+  const toggleLocationMethod = (index: number) => {
+    const newMethods = [...locationMethods];
+    newMethods[index] = newMethods[index] === 'geofence' ? 'coordinates' : 'geofence';
+    setLocationMethods(newMethods);
+
+    // Clear location data when switching methods
+    const newLocations = [...locations];
+    newLocations[index] = {
+      ...newLocations[index],
+      geofence_id: null,
+      latitude: null,
+      longitude: null,
+      radius_meters: 100,
+    };
+    setValue('locations', newLocations);
+    
+    // If switching to coordinates, show map picker
+    if (newMethods[index] === 'coordinates') {
+      setActiveLocationIndex(index);
+      setShowMapPicker(true);
+    }
+  };
+
+  const handleFormSubmit = async (data: FormInputs) => {
+    try {
+      // Validate locations if required
+      if (data.location_required && (!data.locations || data.locations.length === 0)) {
+        throw new Error('At least one location is required');
+      }
+
+      if (data.location_required) {
+        const invalidLocations = data.locations.filter(loc => {
+          const hasGeofence = !!loc.geofence_id;
+          const hasCoordinates = typeof loc.latitude === 'number' && typeof loc.longitude === 'number';
+          return !hasGeofence && !hasCoordinates;
+        });
+
+        if (invalidLocations.length > 0) {
+          throw new Error('Each location must have either a geofence or valid coordinates');
+        }
+      }
+
+      const formattedData = {
+        ...data,
+        price: parseCurrencyInput(priceInput),
+        locations: data.locations.map(loc => ({
+          ...loc,
+          radius_meters: loc.radius_meters || 100,
+          arrival_required: loc.arrival_required || false,
+          departure_required: loc.departure_required || false
+        }))
+      };
+
+      onSubmit(formattedData);
+    } catch (error: any) {
+      toast.error(error.message);
+    }
   };
 
   return (
     <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6">
+      {/* Basic Task Information */}
       <div>
         <label htmlFor="title" className="block text-sm font-medium text-gray-700">
           Title
@@ -279,150 +359,278 @@ export default function EnhancedTaskForm({ onSubmit, initialData, isEdit = false
           </label>
         </div>
         <p className="mt-1 text-sm text-gray-500">
-          Require employees to be at a specific location to work on this task
+          Require employees to be at specific locations to work on this task
         </p>
 
         {locationRequired && (
-          <div className="mt-4 space-y-4 p-4 bg-gray-50 rounded-lg">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Location Method
-              </label>
-              <div className="mt-2 space-y-2">
-                <div className="flex items-center">
-                  <input
-                    type="radio"
-                    id="use_geofence"
-                    name="location_method"
-                    checked={!!selectedGeofence}
-                    onChange={() => setValue('geofence_id', geofences[0]?.id || '')}
-                    className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
-                  />
-                  <label htmlFor="use_geofence" className="ml-2 block text-sm text-gray-700">
-                    Use existing geofence
-                  </label>
-                </div>
-                <div className="flex items-center">
-                  <input
-                    type="radio"
-                    id="use_coordinates"
-                    name="location_method"
-                    checked={!selectedGeofence}
-                    onChange={() => setValue('geofence_id', '')}
-                    className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
-                  />
-                  <label htmlFor="use_coordinates" className="ml-2 block text-sm text-gray-700">
-                    Use specific coordinates
-                  </label>
-                </div>
-              </div>
-            </div>
-
-            {selectedGeofence ? (
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Select Geofence
-                </label>
-                <select
-                  {...register('geofence_id')}
-                  onChange={(e) => handleGeofenceChange(e.target.value)}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                >
-                  <option value="">Select a geofence</option>
-                  {geofences.map((geofence) => (
-                    <option key={geofence.id} value={geofence.id}>
-                      {geofence.name} ({geofence.radius_meters}m radius)
-                    </option>
-                  ))}
-                </select>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Latitude
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    {...register('location_latitude', {
-                      required: locationRequired && !selectedGeofence ? 'Latitude is required' : false,
-                    })}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                    placeholder="0.000000"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Longitude
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    {...register('location_longitude', {
-                      required: locationRequired && !selectedGeofence ? 'Longitude is required' : false,
-                    })}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                    placeholder="0.000000"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Radius (meters)
-                  </label>
-                  <input
-                    type="number"
-                    min="10"
-                    max="1000"
-                    {...register('location_radius_meters')}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                  />
-                </div>
+          <div className="mt-4 space-y-4">
+            {/* Map Picker */}
+            {showMapPicker && (
+              <div className="mb-4">
+                <MapLocationPicker
+                  onLocationSelect={handleMapLocationSelect}
+                  existingLocations={locations
+                    .filter(loc => typeof loc.latitude === 'number' && typeof loc.longitude === 'number')
+                    .map(loc => ({
+                      latitude: loc.latitude as number,
+                      longitude: loc.longitude as number
+                    }))
+                  }
+                  initialCenter={
+                    activeLocationIndex !== null && locations[activeLocationIndex]?.latitude
+                      ? {
+                          lat: locations[activeLocationIndex].latitude!,
+                          lng: locations[activeLocationIndex].longitude!,
+                        }
+                      : undefined
+                  }
+                />
               </div>
             )}
 
-            {!selectedGeofence && (
-              <div>
-                <button
-                  type="button"
-                  onClick={getCurrentLocation}
-                  disabled={gettingLocation}
-                  className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
-                >
-                  {gettingLocation ? (
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600 mr-2"></div>
-                  ) : (
-                    <LocationMarkerIcon className="h-4 w-4 mr-2" />
-                  )}
-                  {gettingLocation ? 'Getting Location...' : 'Use Current Location'}
-                </button>
-              </div>
-            )}
+            {locations.map((location, index) => (
+              <div key={index} className="p-4 bg-gray-50 rounded-lg space-y-4">
+                <div className="flex justify-between items-center">
+                  <h4 className="text-sm font-medium text-gray-900">Location {index + 1}</h4>
+                  <div className="flex space-x-2">
+                    {locationMethods[index] === 'coordinates' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveLocationIndex(index);
+                          setShowMapPicker(true);
+                        }}
+                        className="text-indigo-600 hover:text-indigo-800"
+                        title="Open map picker"
+                        aria-label="Open map picker for location"
+                      >
+                        <MapIcon className="h-5 w-5" />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => removeLocation(index)}
+                      className="text-red-600 hover:text-red-800"
+                      title="Remove location"
+                      aria-label="Remove this location"
+                    >
+                      <TrashIcon className="h-5 w-5" />
+                    </button>
+                  </div>
+                </div>
 
-            <div className="flex items-center space-x-6">
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="auto_check_in"
-                  {...register('auto_check_in')}
-                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                />
-                <label htmlFor="auto_check_in" className="ml-2 block text-sm text-gray-700">
-                  Auto check-in when employee arrives
-                </label>
+                <div>
+                  <fieldset 
+                    aria-label={`Location method selection for location ${index + 1}`}
+                    title={`Location method selection for location ${index + 1}`}
+                    role="group"
+                  >
+                    <legend 
+                      id={`location_method_label_${index}`} 
+                      className="block text-sm font-medium text-gray-700"
+                      title="Location method selection"
+                    >
+                      Location Method
+                    </legend>
+                    <div 
+                    className="mt-2 space-y-2" 
+                    role="radiogroup" 
+                    aria-label="Choose location method"
+                    aria-labelledby={`location_method_label_${index}`}
+                    title="Location method options"
+                    id={`location_method_group_${index}`}
+                    tabIndex={0}
+                    aria-required="true"
+                    aria-describedby={`location_method_description_${index}`}
+                    data-testid={`location-method-group-${index}`}
+                    aria-controls={`location_method_options_${index}`}
+                    aria-expanded="true"
+                    aria-orientation="vertical"
+                    aria-atomic="true"
+                    aria-live="polite"
+                    aria-relevant="all"
+                    data-selected={locationMethods[index] === 'geofence'}
+                    data-form-group="location-method"
+                  >
+                    <div className="flex items-center">
+                      <input
+                        type="radio"
+                        id={`use_geofence_${index}`}
+                        name={`location_method_${index}`}
+                        title="Use geofence"
+                        aria-label={`Use geofence for location ${index + 1}`}
+                        aria-labelledby={`geofence_label_${index}`}
+                        checked={locationMethods[index] === 'geofence'}
+                        onChange={() => toggleLocationMethod(index)}
+                        className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                        placeholder="Use geofence"
+                      />
+                      <label id={`geofence_label_${index}`} htmlFor={`use_geofence_${index}`} className="ml-2 block text-sm text-gray-700">
+                        Use existing geofence
+                      </label>
+                    </div>
+                    <div className="flex items-center">
+                      <input
+                        type="radio"
+                        id={`use_coordinates_${index}`}
+                        name={`location_method_${index}`}
+                        title="Use coordinates"
+                        aria-label={`Use coordinates for location ${index + 1}`}
+                        aria-labelledby={`coordinates_label_${index}`}
+                        checked={locationMethods[index] === 'coordinates'}
+                        onChange={() => toggleLocationMethod(index)}
+                        className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                        placeholder="Use coordinates"
+                      />
+                      <label id={`coordinates_label_${index}`} htmlFor={`use_coordinates_${index}`} className="ml-2 block text-sm text-gray-700">
+                        Use specific coordinates
+                      </label>
+                    </div>
+                  </div>
+                  </fieldset>
+                </div>
+
+                {locationMethods[index] === 'geofence' ? (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">
+                      Select Geofence
+                    </label>
+                    <select
+                      id={`geofence_${index}`}
+                      title="Select geofence"
+                      aria-label="Select geofence"
+                      value={location.geofence_id || ''}
+                      onChange={(e) => handleGeofenceChange(index, e.target.value)}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                    >
+                      <option value="">Select a geofence</option>
+                      {geofences.map((geofence) => (
+                        <option key={geofence.id} value={geofence.id}>
+                          {geofence.name} ({geofence.radius_meters}m radius)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">
+                        Latitude
+                      </label>
+                      <input
+                        type="number"
+                        step="any"
+                        value={location.latitude || ''}
+                        onChange={(e) => {
+                          const newLocations = [...locations];
+                          newLocations[index] = {
+                            ...newLocations[index],
+                            latitude: parseFloat(e.target.value),
+                          };
+                          setValue('locations', newLocations);
+                        }}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                        placeholder="0.000000"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">
+                        Longitude
+                      </label>
+                      <input
+                        type="number"
+                        step="any"
+                        value={location.longitude || ''}
+                        onChange={(e) => {
+                          const newLocations = [...locations];
+                          newLocations[index] = {
+                            ...newLocations[index],
+                            longitude: parseFloat(e.target.value),
+                          };
+                          setValue('locations', newLocations);
+                        }}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                        placeholder="0.000000"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">
+                        Radius (meters)
+                      </label>
+                      <input
+                        type="number"
+                        min="10"
+                        max="1000"
+                        title="Radius in meters (10-1000)"
+                        placeholder="Enter radius"
+                        value={location.radius_meters}
+                        onChange={(e) => {
+                          const newLocations = [...locations];
+                          newLocations[index] = {
+                            ...newLocations[index],
+                            radius_meters: parseInt(e.target.value),
+                          };
+                          setValue('locations', newLocations);
+                        }}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center space-x-6">
+                  <div className="flex items-center">
+                                          <input
+                        type="checkbox"
+                        id={`arrival_required_${index}`}
+                        title="Auto check-in"
+                        checked={location.arrival_required}
+                        onChange={(e) => {
+                          const newLocations = [...locations];
+                          newLocations[index] = {
+                            ...newLocations[index],
+                            arrival_required: e.target.checked,
+                          };
+                          setValue('locations', newLocations);
+                        }}
+                        className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                      />
+                    <label className="ml-2 block text-sm text-gray-700">
+                      Auto check-in when employee arrives
+                    </label>
+                  </div>
+                  <div className="flex items-center">
+                                          <input
+                        type="checkbox"
+                        id={`departure_required_${index}`}
+                        title="Auto check-out"
+                        checked={location.departure_required}
+                        onChange={(e) => {
+                          const newLocations = [...locations];
+                          newLocations[index] = {
+                            ...newLocations[index],
+                            departure_required: e.target.checked,
+                          };
+                          setValue('locations', newLocations);
+                        }}
+                        className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                      />
+                    <label className="ml-2 block text-sm text-gray-700">
+                      Auto check-out when employee leaves
+                    </label>
+                  </div>
+                </div>
               </div>
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="auto_check_out"
-                  {...register('auto_check_out')}
-                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                />
-                <label htmlFor="auto_check_out" className="ml-2 block text-sm text-gray-700">
-                  Auto check-out when employee leaves
-                </label>
-              </div>
-            </div>
+            ))}
+
+            <button
+              type="button"
+              onClick={addLocation}
+              className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            >
+              <PlusIcon className="h-5 w-5 mr-2" />
+              Add Another Location
+            </button>
           </div>
         )}
       </div>
@@ -430,7 +638,7 @@ export default function EnhancedTaskForm({ onSubmit, initialData, isEdit = false
       <div className="flex justify-end">
         <button
           type="submit"
-          className="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+          className="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
         >
           {isEdit ? 'Update Task' : 'Create Task'}
         </button>
