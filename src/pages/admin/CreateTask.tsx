@@ -71,7 +71,7 @@ export default function CreateTask() {
       if (formData.location_required && formData.locations && task) {
         try {
           // First, prepare all location data
-          const locationDataArray = formData.locations.map(location => ({
+          const locationDataArray = formData.locations.map((location: any) => ({
             task_id: task.id,
             geofence_id: location.geofence_id || null,
             latitude: typeof location.latitude === 'number' ? location.latitude : null,

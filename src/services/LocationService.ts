@@ -83,7 +83,7 @@ export class LocationService {
       const testDataWithNames = data.map((location, index) => ({
         ...location,
         full_name: employees[index]?.full_name || 'Test Employee',
-        avatar_url: employees[index]?.avatar_url,
+        avatar_url: employees[index]?.avatar_url || null,
         email: employees[index]?.email
       }));
 
@@ -180,7 +180,7 @@ export class LocationService {
       }
 
       // Filter to keep only the latest location per employee
-      const latestLocations = data?.reduce((acc, curr) => {
+      const latestLocations = data?.reduce((acc: any, curr: any) => {
         if (!acc[curr.user_id] || new Date(curr.timestamp) > new Date(acc[curr.user_id].timestamp)) {
           acc[curr.user_id] = curr;
         }

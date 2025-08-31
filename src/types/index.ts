@@ -65,3 +65,27 @@ export interface TimeLog {
   duration?: number;
   created_at: string;
 }
+
+export interface EmployeeLocation {
+  id: string;
+  user_id: string;
+  latitude: number;
+  longitude: number;
+  recorded_at: string;
+  last_updated: string;
+  battery_level?: number;
+  connection_status?: 'online' | 'offline';
+  location_accuracy?: number;
+  accuracy?: number;
+  task_id?: string;
+  full_name?: string;
+  avatar_url?: string;
+  email?: string;
+  task_title?: string;
+  task_status?: string;
+  task_due_date?: string;
+  activity_status?: 'active' | 'recently_active' | 'offline';
+  timestamp?: string;
+  speed?: number;
+  heading?: number;
+}

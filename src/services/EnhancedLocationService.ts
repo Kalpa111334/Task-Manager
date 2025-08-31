@@ -36,7 +36,7 @@ export class EnhancedLocationService extends LocationService {
       }
 
       // Transform the data to match the expected format
-      return locations.map(location => ({
+      return locations.map((location: any) => ({
             ...location,
         timestamp: location.recorded_at,
         users: {
