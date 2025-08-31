@@ -94,7 +94,7 @@ export class LocationService {
     }
   }
 
-  static async getEmployeeLocations() {
+  static async getEmployeeLocations(showAllEmployees = true) {
     try {
       // First verify the user's role
       const { data: { user } } = await supabase.auth.getUser();
@@ -135,8 +135,8 @@ export class LocationService {
         return [];
       }
 
-      // Get the latest location for each employee (only very recent - last 15 minutes)
-      const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+      // Get the latest location for each employee (extended time window to capture all employees)
+      const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
       
       const { data, error } = await supabase
         .from('employee_locations')
@@ -162,7 +162,7 @@ export class LocationService {
           )
         `)
         .in('user_id', employees.map(emp => emp.id))
-        .gt('timestamp', fifteenMinutesAgo)
+        .gt('timestamp', oneWeekAgo)
         .order('timestamp', { ascending: false });
 
       if (error) {
@@ -175,13 +175,7 @@ export class LocationService {
       }
 
       if (!data || data.length === 0) {
-        console.warn('No employee locations found, creating test data...');
-        // Create test locations for employees
-        const testData = await this.createTestLocations();
-        if (testData) {
-          // Recursively call this method to get the newly created data
-          return this.getEmployeeLocations();
-        }
+        console.log('No employee locations found in the last week');
         return [];
       }
 
@@ -195,18 +189,31 @@ export class LocationService {
 
       const filteredData = latestLocations ? Object.values(latestLocations) : [];
 
-      // Transform the data to match the expected format and filter for active employees only
+      // Transform the data to match the expected format - show ALL employees with valid coordinates
       const transformedData = filteredData
         .filter((location: any) => {
-          // Only show employees who are:
-          // 1. Online or have good connection
-          // 2. Have reasonable battery level (> 10%)
-          // 3. Have recent location data (within last 15 minutes)
-          const isOnline = location.connection_status === 'online' || !location.connection_status;
-          const hasGoodBattery = !location.battery_level || location.battery_level > 0.1;
-          const isRecent = new Date(location.timestamp) > new Date(fifteenMinutesAgo);
+          // Only filter out employees with invalid coordinates or extremely poor accuracy
+          const hasValidCoords = location.latitude && location.longitude && 
+                                !isNaN(location.latitude) && !isNaN(location.longitude);
+          const hasReasonableAccuracy = !location.location_accuracy || location.location_accuracy < 1000; // Allow up to 1km accuracy
           
-          return isOnline && hasGoodBattery && isRecent;
+          if (!hasValidCoords) {
+            console.log(`Employee ${location.user_id} filtered out (invalid coordinates):`, {
+              latitude: location.latitude,
+              longitude: location.longitude
+            });
+            return false;
+          }
+          
+          if (!hasReasonableAccuracy) {
+            console.log(`Employee ${location.user_id} filtered out (poor accuracy):`, {
+              accuracy: location.location_accuracy
+            });
+            return false;
+          }
+          
+          // Show all employees with valid data - activity status will be determined in the UI
+          return true;
         })
         .map((location: any) => ({
           id: location.id,
@@ -243,6 +250,8 @@ export class LocationService {
       throw error;
     }
   }
+
+
 
   private static async updateLocation(userId: string, position: GeolocationPosition) {
     try {

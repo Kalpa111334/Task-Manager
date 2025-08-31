@@ -25,6 +25,9 @@ interface EmployeeLocation extends Location {
   full_name?: string;
   avatar_url?: string;
   last_updated?: string;
+  battery_level?: number;
+  connection_status?: 'online' | 'offline';
+  activity_status?: 'active' | 'recently_active' | 'offline';
 }
 
 const mapContainerStyle = {
@@ -41,11 +44,12 @@ const defaultZoom = 15;
 
 export default function EmployeeTracking() {
   const { isLoaded, loadError } = useGoogleMaps();
-  const [locations, setLocations] = useState<EmployeeLocation[]>([]);
+  const [allLocations, setAllLocations] = useState<EmployeeLocation[]>([]);
   const [selectedLocation, setSelectedLocation] = useState<EmployeeLocation | null>(null);
   const [selectedEmployee, setSelectedEmployee] = useState<string | null>(null);
   const [show3DView, setShow3DView] = useState(false);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+  const [viewMode, setViewMode] = useState<'all' | 'active_only'>('all');
   const [dateRange, setDateRange] = useState({
     start: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 7 days ago
     end: new Date().toISOString().split('T')[0] // today
@@ -90,6 +94,50 @@ export default function EmployeeTracking() {
     }
   };
 
+  // Function to determine activity status
+  const getActivityStatus = (location: EmployeeLocation): 'active' | 'recently_active' | 'offline' => {
+    if (!location.last_updated) return 'offline';
+    
+    const diff = Date.now() - new Date(location.last_updated).getTime();
+    const minutes = Math.floor(diff / 60000);
+    
+    if (minutes <= 10 && location.connection_status === 'online') {
+      return 'active';
+    } else if (minutes <= 60) {
+      return 'recently_active';
+    } else {
+      return 'offline';
+    }
+  };
+
+  // Function to get activity status color
+  const getActivityStatusColor = (status: 'active' | 'recently_active' | 'offline') => {
+    switch (status) {
+      case 'active': return 'bg-green-500';
+      case 'recently_active': return 'bg-yellow-500';
+      case 'offline': return 'bg-gray-500';
+      default: return 'bg-gray-500';
+    }
+  };
+
+  // Function to get activity status text
+  const getActivityStatusText = (status: 'active' | 'recently_active' | 'offline') => {
+    switch (status) {
+      case 'active': return 'ACTIVE';
+      case 'recently_active': return 'RECENT';
+      case 'offline': return 'OFFLINE';
+      default: return 'UNKNOWN';
+    }
+  };
+
+  // Function to get filtered locations based on view mode
+  const getFilteredLocations = () => {
+    if (viewMode === 'active_only') {
+      return allLocations.filter(location => location.activity_status === 'active');
+    }
+    return allLocations;
+  };
+
   const onMapLoad = useCallback((map: google.maps.Map) => {
     mapRef.current = map;
   }, []);
@@ -116,18 +164,26 @@ export default function EmployeeTracking() {
         return;
       }
 
-      const data = await LocationService.getEmployeeLocations();
+      // Fetch all employees with their latest location data
+      const allEmployeeData = await LocationService.getEmployeeLocations();
       
-      // Add timestamp if not present
-      const locationsWithTimestamp = data.map((location: EmployeeLocation) => ({
+      // Add timestamp and activity status to all employees
+      const locationsWithStatus = allEmployeeData.map((location: EmployeeLocation) => ({
         ...location,
-        last_updated: location.last_updated || new Date().toISOString()
+        last_updated: location.last_updated || new Date().toISOString(),
+        activity_status: getActivityStatus(location)
       }));
-      setLocations(locationsWithTimestamp);
 
-      if (locationsWithTimestamp.length > 0) {
+      setAllLocations(locationsWithStatus);
+
+      // Get current locations based on view mode
+      const currentLocations = viewMode === 'active_only' 
+        ? locationsWithStatus.filter(location => location.activity_status === 'active')
+        : locationsWithStatus;
+
+      if (currentLocations.length > 0) {
         // Update or create markers for each location
-        locationsWithTimestamp.forEach((location: EmployeeLocation) => {
+        currentLocations.forEach((location: EmployeeLocation) => {
           const position = { lat: location.latitude, lng: location.longitude };
           
           if (markersRef.current[location.user_id]) {
@@ -147,7 +203,7 @@ export default function EmployeeTracking() {
 
         // Remove markers for employees no longer in the data
         Object.keys(markersRef.current).forEach(userId => {
-          if (!locationsWithTimestamp.find((loc: EmployeeLocation) => loc.user_id === userId)) {
+          if (!currentLocations.find((loc: EmployeeLocation) => loc.user_id === userId)) {
             markersRef.current[userId].setMap(null);
             delete markersRef.current[userId];
           }
@@ -156,13 +212,13 @@ export default function EmployeeTracking() {
         // Auto-zoom to fit all markers if tracking is enabled
         if (isTracking && mapRef.current) {
           const bounds = new google.maps.LatLngBounds();
-          data.forEach((location: Location) => {
-          bounds.extend({ lat: location.latitude, lng: location.longitude });
-        });
-        mapRef.current.fitBounds(bounds);
+          currentLocations.forEach((location: EmployeeLocation) => {
+            bounds.extend({ lat: location.latitude, lng: location.longitude });
+          });
+          mapRef.current.fitBounds(bounds);
           
           // If only one location, zoom in closer
-          if (data.length === 1) {
+          if (currentLocations.length === 1) {
             mapRef.current.setZoom(18);
           }
         }
@@ -173,7 +229,7 @@ export default function EmployeeTracking() {
       console.error('Error fetching locations:', error);
       toast.error('Failed to fetch employee locations');
     }
-  }, [isTracking]);
+  }, [isTracking, viewMode]);
 
   // Set up real-time updates
   useEffect(() => {
@@ -288,8 +344,8 @@ export default function EmployeeTracking() {
   // Get employee locations for 3D view
   const getEmployeeLocationsFor3D = useCallback(() => {
     if (!selectedEmployee) return [];
-    return locations.filter(loc => loc.user_id === selectedEmployee);
-  }, [selectedEmployee, locations]);
+    return allLocations.filter(loc => loc.user_id === selectedEmployee);
+  }, [selectedEmployee, allLocations]);
 
   if (loadError) {
     return <div className="text-red-500">Error loading maps</div>;
@@ -305,7 +361,10 @@ export default function EmployeeTracking() {
         <div>
           <h2 className="text-2xl font-bold">Employee Tracking</h2>
           <p className="text-sm text-gray-600">
-            Showing {locations.length} active employee{locations.length !== 1 ? 's' : ''} (last 15 minutes)
+            {viewMode === 'active_only' 
+              ? `Showing ${getFilteredLocations().length} active employee${getFilteredLocations().length !== 1 ? 's' : ''} (last 10 minutes)`
+              : `Showing ${allLocations.length} employee${allLocations.length !== 1 ? 's' : ''} with real-time status updates`
+            }
           </p>
         </div>
         
@@ -330,6 +389,26 @@ export default function EmployeeTracking() {
               title="End date for report generation"
               aria-label="End date"
             />
+          </div>
+
+          {/* View Mode Toggle */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => setViewMode('all')}
+              className={`px-4 py-2 rounded text-sm ${
+                viewMode === 'all' ? 'bg-blue-500 hover:bg-blue-600' : 'bg-gray-200 hover:bg-gray-300'
+              } text-white`}
+            >
+              All Employees
+            </button>
+            <button
+              onClick={() => setViewMode('active_only')}
+              className={`px-4 py-2 rounded text-sm ${
+                viewMode === 'active_only' ? 'bg-green-500 hover:bg-green-600' : 'bg-gray-200 hover:bg-gray-300'
+              } text-white`}
+            >
+              Active Only
+            </button>
           </div>
 
           {/* Action Buttons */}
@@ -368,7 +447,7 @@ export default function EmployeeTracking() {
             fullscreenControl: true,
           }}
         >
-          {locations.map((location) => (
+          {getFilteredLocations().map((location) => (
             <Marker
               key={location.user_id}
               position={{
@@ -388,7 +467,19 @@ export default function EmployeeTracking() {
               onCloseClick={() => setSelectedLocation(null)}
             >
               <div className="p-2 max-w-xs">
-                <h3 className="font-bold mb-2">{selectedLocation.full_name || 'Employee'}</h3>
+                <div className="flex items-center gap-2 mb-2">
+                  <h3 className="font-bold">{selectedLocation.full_name || 'Employee'}</h3>
+                  <div className="flex items-center gap-1">
+                    <div className={`w-2 h-2 rounded-full ${getActivityStatusColor(selectedLocation.activity_status || 'offline')} ${selectedLocation.activity_status === 'active' ? 'animate-pulse' : ''}`}></div>
+                    <span className={`text-xs font-medium ${
+                      selectedLocation.activity_status === 'active' ? 'text-green-600' :
+                      selectedLocation.activity_status === 'recently_active' ? 'text-yellow-600' :
+                      'text-gray-600'
+                    }`}>
+                      {getActivityStatusText(selectedLocation.activity_status || 'offline')}
+                    </span>
+                  </div>
+                </div>
                 <div className="text-sm">
                   <p className="mb-1">
                     <strong>Last Updated:</strong>{' '}
@@ -409,8 +500,25 @@ export default function EmployeeTracking() {
                       <strong>Accuracy:</strong> ±{selectedLocation.accuracy.toFixed(1)}m
                     </p>
                   )}
+                  
+                  {/* Status indicators */}
+                  <div className="flex items-center gap-4 mt-2 pt-2 border-t">
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs">🔋</span>
+                      <span className="text-xs">
+                        {selectedLocation.battery_level ? `${selectedLocation.battery_level}%` : 'N/A'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs">📶</span>
+                      <span className="text-xs">
+                        {selectedLocation.connection_status === 'online' ? 'Online' : 'Offline'}
+                      </span>
+                    </div>
+                  </div>
+                  
                   {selectedLocation.speed && (
-                    <p className="mb-1">
+                    <p className="mb-1 mt-2">
                       <strong>Speed:</strong> {(selectedLocation.speed * 3.6).toFixed(1)} km/h
                     </p>
                   )}
@@ -426,21 +534,24 @@ export default function EmployeeTracking() {
         </GoogleMap>
       </div>
 
-      {locations.length === 0 ? (
+      {getFilteredLocations().length === 0 ? (
         <div className="mt-8 text-center">
           <div className="bg-gray-50 rounded-lg p-8">
             <div className="text-6xl mb-4">📍</div>
-            <h3 className="text-lg font-semibold text-gray-700 mb-2">No Active Employees</h3>
+            <h3 className="text-lg font-semibold text-gray-700 mb-2">
+              {viewMode === 'active_only' ? 'No Active Employees' : 'No Employees Found'}
+            </h3>
             <p className="text-gray-500">
-              No employees have reported their location in the last 15 minutes.
-              <br />
-              Employees need to be online with good battery levels to appear on the map.
+              {viewMode === 'active_only' 
+                ? 'No employees are currently active. Switch to "All Employees" to see all employees with their last known locations.'
+                : 'No employees have location data available. Employees will appear here once they start sharing their location.'
+              }
             </p>
           </div>
         </div>
       ) : (
         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {locations.map((location) => (
+          {getFilteredLocations().map((location) => (
           <div
             key={location.user_id}
             className="bg-white p-4 rounded-lg shadow hover:shadow-lg transition-shadow"
@@ -454,7 +565,19 @@ export default function EmployeeTracking() {
                 />
               )}
               <div className="flex-1">
-                <h3 className="font-bold text-lg">{location.full_name || 'Employee'}</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-lg">{location.full_name || 'Employee'}</h3>
+                  <div className="flex items-center gap-1">
+                    <div className={`w-2 h-2 rounded-full ${getActivityStatusColor(location.activity_status || 'offline')} ${location.activity_status === 'active' ? 'animate-pulse' : ''}`} title={getActivityStatusText(location.activity_status || 'offline')}></div>
+                    <span className={`text-xs font-medium ${
+                      location.activity_status === 'active' ? 'text-green-600' :
+                      location.activity_status === 'recently_active' ? 'text-yellow-600' :
+                      'text-gray-600'
+                    }`}>
+                      {getActivityStatusText(location.activity_status || 'offline')}
+                    </span>
+                  </div>
+                </div>
                 <p className="text-sm text-gray-500 flex items-center">
                   <span className="mr-1">🕐</span>
                   {location.last_updated
@@ -471,6 +594,22 @@ export default function EmployeeTracking() {
               {location.accuracy && (
                 <p className="text-gray-600">Accuracy: ±{location.accuracy.toFixed(1)}m</p>
               )}
+              
+              {/* Status indicators */}
+              <div className="flex items-center gap-4 mt-2">
+                <div className="flex items-center gap-1">
+                  <span className="text-xs">🔋</span>
+                  <span className="text-xs text-gray-600">
+                    {location.battery_level ? `${location.battery_level}%` : 'N/A'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="text-xs">📶</span>
+                  <span className="text-xs text-gray-600">
+                    {location.connection_status === 'online' ? 'Online' : 'Offline'}
+                  </span>
+                </div>
+              </div>
             </div>
 
             {/* Action Buttons */}
