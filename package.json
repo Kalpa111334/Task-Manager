@@ -19,15 +19,21 @@
     "@react-pdf/renderer": "^4.3.0",
     "@supabase/supabase-js": "^2.39.0",
     "@types/google.maps": "^3.58.1",
+    "@types/three": "^0.179.0",
     "chart.js": "^4.4.0",
     "date-fns": "^4.1.0",
     "framer-motion": "^12.9.2",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^3.0.2",
+    "plotly.js-dist-min": "^3.1.0",
     "react": "^18.2.0",
     "react-chartjs-2": "^5.2.0",
     "react-dom": "^18.2.0",
     "react-hook-form": "^7.56.1",
     "react-hot-toast": "^2.4.1",
-    "react-router-dom": "^6.20.0"
+    "react-plotly.js": "^2.6.0",
+    "react-router-dom": "^6.20.0",
+    "three": "^0.179.1"
   },
   "devDependencies": {
     "@types/react": "^18.2.37",

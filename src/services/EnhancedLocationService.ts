@@ -19,50 +19,45 @@ export class EnhancedLocationService extends LocationService {
     try {
       // First, get all employee locations
       const { data: locations, error: locationsError } = await supabase
-        .from('employee_locations')
-        .select('*')
-        .order('timestamp', { ascending: false });
+        .rpc('get_latest_employee_locations');
 
       if (locationsError) {
+        console.error('RPC Error in getEmployeeLocations:', {
+          error: locationsError,
+          message: locationsError.message,
+          details: locationsError.details
+        });
         throw locationsError;
       }
 
       if (!locations || locations.length === 0) {
+        console.warn('No employee locations found');
         return [];
       }
 
-      // Get unique user IDs
-      const userIds = [...new Set(locations.map(loc => loc.user_id))];
-
-      // Fetch user data separately
-      const { data: users, error: usersError } = await supabase
-        .from('users')
-        .select('id, full_name, avatar_url')
-        .in('id', userIds);
-
-      if (usersError) {
-        throw usersError;
-      }
-
-      // Create a map of users for quick lookup
-      const userMap = new Map(users?.map(user => [user.id, user]) || []);
-
-      // Get the latest location for each user and attach user data
-      const latestLocations = new Map();
-      locations.forEach((location) => {
-        if (!latestLocations.has(location.user_id) || 
-            new Date(location.timestamp) > new Date(latestLocations.get(location.user_id).timestamp)) {
-          const userData = userMap.get(location.user_id);
-          latestLocations.set(location.user_id, {
+      // Transform the data to match the expected format
+      return locations.map(location => ({
             ...location,
-            users: userData || { full_name: 'Unknown User', avatar_url: null }
-          });
-        }
-      });
-
-      return Array.from(latestLocations.values());
+        timestamp: location.recorded_at,
+        users: {
+          full_name: location.full_name || 'Unknown User',
+          avatar_url: location.avatar_url,
+          email: location.email
+        },
+        tasks: location.task_id ? {
+          id: location.task_id,
+          title: location.task_title,
+          status: location.task_status,
+          due_date: location.task_due_date
+        } : null
+      }));
     } catch (error) {
-      console.error('Error in getEmployeeLocations:', error);
+      console.error('Comprehensive error in getEmployeeLocations:', {
+        error,
+        message: (error as Error).message,
+        name: (error as Error).name,
+        stack: (error as Error).stack
+      });
       throw error;
     }
   }

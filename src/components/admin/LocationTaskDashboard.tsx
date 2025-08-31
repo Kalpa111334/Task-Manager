@@ -44,25 +44,41 @@ const mapOptions = {
 
 interface EmployeeLocation {
   id: string;
+  user_id: string;
   latitude: number;
   longitude: number;
-  user_id: string;
-  timestamp: string;
+  recorded_at: string;
   battery_level?: number;
   connection_status?: string;
-  task_id?: string;
   location_accuracy?: number;
-  users: {
+  task_id?: string;
+  full_name: string;
+  avatar_url?: string;
+  email?: string;
+  task_title?: string;
+  task_status?: string;
+  task_due_date?: string;
+  users?: {
     full_name: string;
-    avatar_url: string;
+    avatar_url?: string;
+    email?: string;
   };
 }
 
-interface TaskWithLocation extends Task {
+interface TaskWithLocation {
+  id: string;
+  title: string;
+  description: string;
+  status: string;
+  priority: string;
+  due_date: string;
+  assigned_to: string;
+  price: number;
   location_latitude?: number;
   location_longitude?: number;
   location_radius_meters?: number;
-  geofences?: Geofence[];
+  completed_at?: string;
+  geofences: Geofence[];
 }
 
 export default function LocationTaskDashboard() {
@@ -104,17 +120,7 @@ export default function LocationTaskDashboard() {
 
       // Fetch tasks with location data
       const { data: taskData, error: taskError } = await supabase
-        .from('tasks')
-        .select(`
-          *,
-          task_locations (
-            geofence_id,
-            required_latitude,
-            required_longitude,
-            required_radius_meters
-          )
-        `)
-        .order('created_at', { ascending: false });
+        .rpc('get_all_task_locations');
 
       if (taskError) throw taskError;
 
@@ -123,27 +129,28 @@ export default function LocationTaskDashboard() {
       setGeofences(geofenceData);
 
       // Process tasks with geofence data
-      const tasksWithGeofences = await Promise.all(
-        (taskData || []).map(async (task) => {
-          const taskGeofences: Geofence[] = [];
-          
-          if (task.task_locations) {
-            for (const taskLocation of task.task_locations) {
-              if (taskLocation.geofence_id) {
-                const geofence = geofenceData.find(g => g.id === taskLocation.geofence_id);
-                if (geofence) {
-                  taskGeofences.push(geofence);
-                }
-              }
-            }
-          }
-
-          return {
-            ...task,
-            geofences: taskGeofences,
-          };
-        })
-      );
+      const tasksWithGeofences = (taskData || []).map((task: any) => {
+        return {
+          id: task.task_id,
+          title: task.title,
+          description: task.description,
+          status: task.status,
+          priority: task.priority,
+          due_date: task.due_date,
+          assigned_to: task.assigned_to,
+          price: task.price,
+          location_latitude: task.latitude,
+          location_longitude: task.longitude,
+          location_radius_meters: task.radius_meters,
+          geofences: task.geofence_id ? [{
+            id: task.geofence_id,
+            name: task.geofence_name,
+            center_latitude: task.latitude,
+            center_longitude: task.longitude,
+            radius_meters: task.radius_meters
+          }] : []
+        };
+      });
 
       setTasks(tasksWithGeofences);
 
@@ -155,7 +162,7 @@ export default function LocationTaskDashboard() {
         });
         
         // Include task locations in bounds
-        tasksWithGeofences.forEach((task) => {
+        tasksWithGeofences.forEach((task: TaskWithLocation) => {
           if (task.location_latitude && task.location_longitude) {
             bounds.extend({ lat: task.location_latitude, lng: task.location_longitude });
           }
@@ -267,7 +274,7 @@ export default function LocationTaskDashboard() {
   };
 
   const getEmployeeStatusColor = (location: EmployeeLocation) => {
-    const timeDiff = Date.now() - new Date(location.timestamp).getTime();
+    const timeDiff = Date.now() - new Date(location.recorded_at).getTime();
     const minutesAgo = timeDiff / (1000 * 60);
 
     if (minutesAgo > 30) return '#EF4444'; // Red - offline/stale
@@ -590,15 +597,15 @@ export default function LocationTaskDashboard() {
             >
               <div className="p-2 max-w-xs">
                 <div className="flex items-center mb-2">
-                  <img
-                    src={selectedLocation.users.avatar_url || `https://ui-avatars.com/api/?name=${selectedLocation.users.full_name}`}
-                    alt={selectedLocation.users.full_name}
-                    className="w-10 h-10 rounded-full mr-2"
-                  />
-                  <div>
-                    <h3 className="font-semibold">{selectedLocation.users.full_name}</h3>
-                    <p className="text-sm text-gray-600">
-                      {new Date(selectedLocation.timestamp).toLocaleString()}
+                                      <img
+                      src={selectedLocation.avatar_url || `https://ui-avatars.com/api/?name=${selectedLocation.full_name}`}
+                      alt={selectedLocation.full_name}
+                      className="w-10 h-10 rounded-full mr-2"
+                    />
+                    <div>
+                      <h3 className="font-semibold">{selectedLocation.full_name}</h3>
+                      <p className="text-sm text-gray-600">
+                        {new Date(selectedLocation.recorded_at).toLocaleString()}
                     </p>
                   </div>
                 </div>

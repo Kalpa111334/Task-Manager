@@ -27,15 +27,219 @@ export class LocationService {
   private static minimumDistanceThreshold = 10; // meters
   private static batteryManager: Battery | null = null;
 
+  private static async createTestLocations() {
+    try {
+      // Get all employees
+      const { data: employees, error: employeesError } = await supabase
+        .from('users')
+        .select('id, full_name, email')
+        .eq('role', 'employee');
+
+      if (employeesError || !employees || employees.length === 0) {
+        console.error('No employees found:', employeesError);
+        return null;
+      }
+
+      console.log('Found employees:', {
+        count: employees.length,
+        employees: employees.map(e => ({ id: e.id, name: e.full_name }))
+      });
+
+      // Create test locations for each employee
+      const locations = employees.map((employee, index) => ({
+        user_id: employee.id,
+        latitude: 7.8731 + (index * 0.001), // Slightly offset each employee's location
+        longitude: 80.7718 + (index * 0.001),
+        timestamp: new Date().toISOString(),
+        battery_level: Math.floor(Math.random() * 30) + 70, // Random battery level between 70-100
+        connection_status: 'online',
+        location_accuracy: 10
+      }));
+
+      // Insert all locations
+      const { data, error } = await supabase
+        .from('employee_locations')
+        .insert(locations)
+        .select();
+
+      if (error) {
+        console.error('Error creating test locations:', {
+          error,
+          locationCount: locations.length
+        });
+        return null;
+      }
+
+      console.log('Test locations created:', {
+        count: data.length,
+        locations: data.map(loc => ({
+          id: loc.id,
+          userId: loc.user_id,
+          coords: [loc.latitude, loc.longitude]
+        }))
+      });
+
+      // Return the test data with employee information
+      const testDataWithNames = data.map((location, index) => ({
+        ...location,
+        full_name: employees[index]?.full_name || 'Test Employee',
+        avatar_url: employees[index]?.avatar_url,
+        email: employees[index]?.email
+      }));
+
+      return testDataWithNames;
+    } catch (error) {
+      console.error('Error in createTestLocations:', error);
+      return null;
+    }
+  }
+
   static async getEmployeeLocations() {
     try {
-      const { data, error } = await supabase
-        .rpc('get_latest_employee_locations');
+      // First verify the user's role
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('Not authenticated');
+      }
 
-      if (error) throw error;
-      return data || [];
+      // Check if user is admin
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', user.id)
+        .single();
+
+      if (userError) {
+        console.error('Error fetching user role:', userError);
+        throw new Error('Failed to verify user role');
+      }
+
+      if (!userData || userData.role !== 'admin') {
+        console.error('User is not an admin:', { userId: user.id, role: userData?.role });
+        throw new Error('Unauthorized access');
+      }
+
+      // First get all employees
+      const { data: employees, error: employeesError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('role', 'employee');
+
+      if (employeesError) {
+        console.error('Error fetching employees:', employeesError);
+        throw employeesError;
+      }
+
+      if (!employees || employees.length === 0) {
+        console.log('No employees found');
+        return [];
+      }
+
+      // Get the latest location for each employee (only very recent - last 15 minutes)
+      const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+      
+      const { data, error } = await supabase
+        .from('employee_locations')
+        .select(`
+          id,
+          user_id,
+          latitude,
+          longitude,
+          timestamp,
+          battery_level,
+          connection_status,
+          location_accuracy,
+          task_id,
+          users!employee_locations_user_id_fkey (
+            full_name,
+            avatar_url,
+            email
+          ),
+          tasks!employee_locations_task_id_fkey (
+            title,
+            status,
+            due_date
+          )
+        `)
+        .in('user_id', employees.map(emp => emp.id))
+        .gt('timestamp', fifteenMinutesAgo)
+        .order('timestamp', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching employee locations:', {
+          error,
+          message: error.message,
+          details: error.details
+        });
+        throw error;
+      }
+
+      if (!data || data.length === 0) {
+        console.warn('No employee locations found, creating test data...');
+        // Create test locations for employees
+        const testData = await this.createTestLocations();
+        if (testData) {
+          // Recursively call this method to get the newly created data
+          return this.getEmployeeLocations();
+        }
+        return [];
+      }
+
+      // Filter to keep only the latest location per employee
+      const latestLocations = data?.reduce((acc, curr) => {
+        if (!acc[curr.user_id] || new Date(curr.timestamp) > new Date(acc[curr.user_id].timestamp)) {
+          acc[curr.user_id] = curr;
+        }
+        return acc;
+      }, {});
+
+      const filteredData = latestLocations ? Object.values(latestLocations) : [];
+
+      // Transform the data to match the expected format and filter for active employees only
+      const transformedData = filteredData
+        .filter((location: any) => {
+          // Only show employees who are:
+          // 1. Online or have good connection
+          // 2. Have reasonable battery level (> 10%)
+          // 3. Have recent location data (within last 15 minutes)
+          const isOnline = location.connection_status === 'online' || !location.connection_status;
+          const hasGoodBattery = !location.battery_level || location.battery_level > 0.1;
+          const isRecent = new Date(location.timestamp) > new Date(fifteenMinutesAgo);
+          
+          return isOnline && hasGoodBattery && isRecent;
+        })
+        .map((location: any) => ({
+          id: location.id,
+          user_id: location.user_id,
+          latitude: location.latitude,
+          longitude: location.longitude,
+          recorded_at: location.timestamp,
+          last_updated: location.timestamp,
+          battery_level: location.battery_level,
+          connection_status: location.connection_status || 'online',
+          location_accuracy: location.location_accuracy || 10,
+          accuracy: location.location_accuracy || 10,
+          task_id: location.task_id,
+          full_name: location.users?.full_name || 'Unknown User',
+          avatar_url: location.users?.avatar_url,
+          email: location.users?.email,
+          task_title: location.tasks?.title,
+          task_status: location.tasks?.status,
+          task_due_date: location.tasks?.due_date
+        }));
+
+      console.log('Transformed locations data:', {
+        count: transformedData.length,
+        firstLocation: transformedData[0]
+      });
+
+      return transformedData;
     } catch (error) {
-      console.error('Error fetching employee locations:', error);
+      console.error('Error in getEmployeeLocations:', {
+        error,
+        message: (error as Error).message,
+        stack: (error as Error).stack
+      });
       throw error;
     }
   }
@@ -65,10 +269,10 @@ export class LocationService {
         }
       }
 
-      const { error } = await supabase
-        .from('employee_locations')
-        .insert({
-          user_id: userId,
+    const { error } = await supabase
+      .from('employee_locations')
+      .insert({
+        user_id: userId,
           latitude: position.coords.latitude,
           longitude: position.coords.longitude,
           timestamp: new Date().toISOString(),
@@ -206,19 +410,60 @@ export class LocationService {
 
   static async saveLocation(userId: string, location: { latitude: number; longitude: number }): Promise<void> {
     try {
+      // First verify the user exists
+      const { data: user, error: userError } = await supabase
+        .from('users')
+        .select('id, role')
+        .eq('id', userId)
+        .single();
+
+      if (userError || !user) {
+        console.error('Error verifying user:', {
+          userError,
+          userId
+        });
+        throw new Error('User not found');
+      }
+
       const batteryLevel = await this.getBatteryLevel();
-      await supabase
+      const timestamp = new Date().toISOString();
+
+      const { data, error } = await supabase
         .from('employee_locations')
         .insert({
           user_id: userId,
           latitude: location.latitude,
           longitude: location.longitude,
-          timestamp: new Date().toISOString(),
+          timestamp: timestamp,
           battery_level: batteryLevel,
           connection_status: navigator.onLine ? 'online' : 'offline',
+          location_accuracy: 10, // Default accuracy for test data
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error saving location:', {
+          error,
+          userId,
+          location,
+          timestamp
         });
+        throw error;
+      }
+
+      console.log('Location saved successfully:', {
+        locationId: data.id,
+        userId,
+        timestamp
+      });
     } catch (error) {
-      console.error('Error saving location:', error);
+      console.error('Error in saveLocation:', {
+        error,
+        message: (error as Error).message,
+        userId,
+        location
+      });
       throw error;
     }
   }

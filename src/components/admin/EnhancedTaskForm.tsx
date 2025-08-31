@@ -239,9 +239,9 @@ export default function EnhancedTaskForm({ onSubmit, initialData, isEdit = false
         }
       }
 
-      const formattedData = {
-        ...data,
-        price: parseCurrencyInput(priceInput),
+    const formattedData = {
+      ...data,
+      price: parseCurrencyInput(priceInput),
         locations: data.locations.map(loc => ({
           ...loc,
           radius_meters: loc.radius_meters || 100,
@@ -432,7 +432,7 @@ export default function EnhancedTaskForm({ onSubmit, initialData, isEdit = false
                   </div>
                 </div>
 
-                <div>
+            <div>
                   <fieldset 
                     aria-label={`Location method selection for location ${index + 1}`}
                     title={`Location method selection for location ${index + 1}`}
@@ -443,7 +443,7 @@ export default function EnhancedTaskForm({ onSubmit, initialData, isEdit = false
                       className="block text-sm font-medium text-gray-700"
                       title="Location method selection"
                     >
-                      Location Method
+                Location Method
                     </legend>
                     <div 
                     className="mt-2 space-y-2" 
@@ -465,9 +465,9 @@ export default function EnhancedTaskForm({ onSubmit, initialData, isEdit = false
                     data-selected={locationMethods[index] === 'geofence'}
                     data-form-group="location-method"
                   >
-                    <div className="flex items-center">
-                      <input
-                        type="radio"
+                <div className="flex items-center">
+                  <input
+                    type="radio"
                         id={`use_geofence_${index}`}
                         name={`location_method_${index}`}
                         title="Use geofence"
@@ -475,16 +475,16 @@ export default function EnhancedTaskForm({ onSubmit, initialData, isEdit = false
                         aria-labelledby={`geofence_label_${index}`}
                         checked={locationMethods[index] === 'geofence'}
                         onChange={() => toggleLocationMethod(index)}
-                        className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                    className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
                         placeholder="Use geofence"
-                      />
+                  />
                       <label id={`geofence_label_${index}`} htmlFor={`use_geofence_${index}`} className="ml-2 block text-sm text-gray-700">
-                        Use existing geofence
-                      </label>
-                    </div>
-                    <div className="flex items-center">
-                      <input
-                        type="radio"
+                    Use existing geofence
+                  </label>
+                </div>
+                <div className="flex items-center">
+                  <input
+                    type="radio"
                         id={`use_coordinates_${index}`}
                         name={`location_method_${index}`}
                         title="Use coordinates"
@@ -492,47 +492,47 @@ export default function EnhancedTaskForm({ onSubmit, initialData, isEdit = false
                         aria-labelledby={`coordinates_label_${index}`}
                         checked={locationMethods[index] === 'coordinates'}
                         onChange={() => toggleLocationMethod(index)}
-                        className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                    className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
                         placeholder="Use coordinates"
-                      />
+                  />
                       <label id={`coordinates_label_${index}`} htmlFor={`use_coordinates_${index}`} className="ml-2 block text-sm text-gray-700">
-                        Use specific coordinates
-                      </label>
-                    </div>
-                  </div>
-                  </fieldset>
+                    Use specific coordinates
+                  </label>
                 </div>
+              </div>
+                  </fieldset>
+            </div>
 
                 {locationMethods[index] === 'geofence' ? (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">
-                      Select Geofence
-                    </label>
-                    <select
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  Select Geofence
+                </label>
+                <select
                       id={`geofence_${index}`}
                       title="Select geofence"
                       aria-label="Select geofence"
                       value={location.geofence_id || ''}
                       onChange={(e) => handleGeofenceChange(index, e.target.value)}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                    >
-                      <option value="">Select a geofence</option>
-                      {geofences.map((geofence) => (
-                        <option key={geofence.id} value={geofence.id}>
-                          {geofence.name} ({geofence.radius_meters}m radius)
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">
-                        Latitude
-                      </label>
-                      <input
-                        type="number"
-                        step="any"
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                >
+                  <option value="">Select a geofence</option>
+                  {geofences.map((geofence) => (
+                    <option key={geofence.id} value={geofence.id}>
+                      {geofence.name} ({geofence.radius_meters}m radius)
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Latitude
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
                         value={location.latitude || ''}
                         onChange={(e) => {
                           const newLocations = [...locations];
@@ -542,17 +542,17 @@ export default function EnhancedTaskForm({ onSubmit, initialData, isEdit = false
                           };
                           setValue('locations', newLocations);
                         }}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                        placeholder="0.000000"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">
-                        Longitude
-                      </label>
-                      <input
-                        type="number"
-                        step="any"
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                    placeholder="0.000000"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Longitude
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
                         value={location.longitude || ''}
                         onChange={(e) => {
                           const newLocations = [...locations];
@@ -562,18 +562,18 @@ export default function EnhancedTaskForm({ onSubmit, initialData, isEdit = false
                           };
                           setValue('locations', newLocations);
                         }}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                        placeholder="0.000000"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">
-                        Radius (meters)
-                      </label>
-                      <input
-                        type="number"
-                        min="10"
-                        max="1000"
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                    placeholder="0.000000"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Radius (meters)
+                  </label>
+                  <input
+                    type="number"
+                    min="10"
+                    max="1000"
                         title="Radius in meters (10-1000)"
                         placeholder="Enter radius"
                         value={location.radius_meters}
@@ -585,16 +585,16 @@ export default function EnhancedTaskForm({ onSubmit, initialData, isEdit = false
                           };
                           setValue('locations', newLocations);
                         }}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                      />
-                    </div>
-                  </div>
-                )}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                  />
+                </div>
+              </div>
+            )}
 
-                <div className="flex items-center space-x-6">
-                  <div className="flex items-center">
-                                          <input
-                        type="checkbox"
+            <div className="flex items-center space-x-6">
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
                         id={`arrival_required_${index}`}
                         title="Auto check-in"
                         checked={location.arrival_required}
@@ -606,15 +606,15 @@ export default function EnhancedTaskForm({ onSubmit, initialData, isEdit = false
                           };
                           setValue('locations', newLocations);
                         }}
-                        className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                      />
+                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                />
                     <label className="ml-2 block text-sm text-gray-700">
-                      Auto check-in when employee arrives
-                    </label>
-                  </div>
-                  <div className="flex items-center">
-                                          <input
-                        type="checkbox"
+                  Auto check-in when employee arrives
+                </label>
+              </div>
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
                         id={`departure_required_${index}`}
                         title="Auto check-out"
                         checked={location.departure_required}
@@ -626,13 +626,13 @@ export default function EnhancedTaskForm({ onSubmit, initialData, isEdit = false
                           };
                           setValue('locations', newLocations);
                         }}
-                        className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                      />
+                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                />
                     <label className="ml-2 block text-sm text-gray-700">
-                      Auto check-out when employee leaves
-                    </label>
-                  </div>
-                </div>
+                  Auto check-out when employee leaves
+                </label>
+              </div>
+            </div>
               </div>
             ))}
 

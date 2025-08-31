@@ -25,6 +25,9 @@ export interface Task {
   total_pause_duration?: number;
   hasApprovedProof?: boolean;
   task_proofs?: TaskProof[];
+  location_required: boolean;
+  created_by: string;
+  updated_at: string;
 }
 
 export interface TaskProof {
@@ -61,4 +64,4 @@ export interface TimeLog {
   end_time?: string;
   duration?: number;
   created_at: string;
-} 
+}

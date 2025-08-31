@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { GoogleMap, Marker, InfoWindow, useLoadScript } from '@react-google-maps/api';
 import { LocationService } from '../services/LocationService';
-import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import {
   UserGroupIcon,
@@ -11,6 +10,7 @@ import {
   ArrowLeftIcon,
 } from '@heroicons/react/outline';
 import toast from 'react-hot-toast';
+import { supabase } from '../lib/supabase';
 
 interface EmployeeLocation {
   id: string;
@@ -91,11 +91,47 @@ export default function EmployeeTrackingMap() {
     }
   }, [addressCache]);
 
-  const fetchLocations = useCallback(async () => {
+  const fetchLocations = useCallback(async (signal?: AbortSignal) => {
+    if (!mapRef.current || signal?.aborted) return;
     try {
+      // Check user authentication and role
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        console.error('No authenticated user');
+        setError('User not authenticated');
+        toast.error('Please log in to view employee locations');
+        return;
+      }
+
+      // Verify user is an admin
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', user.id)
+        .single();
+
+      if (userError || !userData) {
+        console.error('Failed to verify user role:', userError);
+        setError('Failed to verify user role');
+        toast.error('Unable to verify user role');
+        return;
+      }
+
+      if (userData.role !== 'admin') {
+        console.error('User is not an admin:', { role: userData.role });
+        setError('Unauthorized access');
+        toast.error('Only admins can view employee locations');
+        return;
+      }
+
       const data = await LocationService.getEmployeeLocations();
-      
-      // Fetch addresses for new locations
+      if (!data || data.length === 0) {
+        setError('No employee locations found');
+        toast('No active employee locations available', { icon: 'ℹ️' });
+        setLocations([]);
+        return;
+      }
+
       const locationsWithAddresses = await Promise.all(
         data.map(async (location: EmployeeLocation) => ({
           ...location,
@@ -106,7 +142,6 @@ export default function EmployeeTrackingMap() {
       setLocations(locationsWithAddresses);
       setError(null);
 
-      // Auto-fit bounds to include all markers
       if (locationsWithAddresses.length > 0 && mapRef.current) {
         const bounds = new google.maps.LatLngBounds();
         locationsWithAddresses.forEach((location) => {
@@ -114,23 +149,33 @@ export default function EmployeeTrackingMap() {
         });
         mapRef.current.fitBounds(bounds);
         
-        // Set zoom to maximum detail if only one location
         if (locationsWithAddresses.length === 1) {
-          mapRef.current.setZoom(20); // Maximum street-level detail
+          mapRef.current.setZoom(20);
         }
       }
-    } catch (error) {
-      console.error('Error fetching locations:', error);
+    } catch (err) {
+      console.error('Error fetching locations:', err);
       setError('Failed to fetch employee locations');
-      toast.error('Failed to update employee locations');
+      toast.error('Unable to retrieve employee locations');
     }
-  }, [fetchAddress]);
+  }, [mapRef, setError, fetchAddress]);
 
   useEffect(() => {
-    fetchLocations();
-    const interval = setInterval(fetchLocations, 30000); // Update every 30 seconds
+    const abortController = new AbortController();
 
-    return () => clearInterval(interval);
+    const updateLocations = async () => {
+      if (!abortController.signal.aborted) {
+        await fetchLocations(abortController.signal);
+      }
+    };
+
+    updateLocations();
+    const interval = setInterval(updateLocations, 30000);
+
+    return () => {
+      abortController.abort();
+      clearInterval(interval);
+    };
   }, [fetchLocations]);
 
   if (!isLoaded) {
@@ -243,7 +288,6 @@ export default function EmployeeTrackingMap() {
             />
           ))}
 
-          {/* InfoWindow Styling */}
           {selectedLocation && (
             <InfoWindow
               position={{
@@ -352,4 +396,4 @@ export default function EmployeeTrackingMap() {
       </div>
     </div>
   );
-} 
+}

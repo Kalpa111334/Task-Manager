@@ -83,32 +83,82 @@ export default function LocationTaskInterface() {
   }, [user]);
 
   const fetchTasks = async () => {
-    if (!user) return;
+    if (!user) {
+      toast.error('User not authenticated');
+      return;
+    }
 
     try {
+      // First, verify user authentication and role
+      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+      if (authError || !authUser) {
+        console.error('Authentication error:', {
+          authError,
+          authUser: !!authUser,
+          userFromContext: !!user
+        });
+        toast.error(`Authentication failed: ${authError?.message || 'Unknown error'}`);
+        return;
+      }
+
+      // Fetch user details to confirm role
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', authUser.id)
+        .single();
+
+      if (userError || !userData) {
+        console.error('User details fetch error:', {
+          userError,
+          userDataExists: !!userData
+        });
+        toast.error(`Failed to fetch user details: ${userError?.message || 'Unknown error'}`);
+        return;
+      }
+
+      // Fetch tasks
       const { data, error } = await supabase
         .from('tasks')
         .select(`
           *,
           task_locations (
-            required_latitude,
-            required_longitude,
-            required_radius_meters,
+            latitude,
+            longitude,
+            radius_meters,
             arrival_required,
             departure_required
           )
         `)
-        .eq('assigned_to', user.id)
+        .eq('assigned_to', authUser.id)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Detailed task fetch error:', {
+          error,
+          userId: authUser.id,
+          userRole: userData.role
+        });
+        toast.error(error.message || 'Failed to fetch tasks');
+        return;
+      }
+
+      if (!data || data.length === 0) {
+        console.warn('No tasks found for user', {
+          userId: authUser.id,
+          userRole: userData.role
+        });
+        toast('No tasks found', { icon: 'ℹ️' });
+        setTasks([]);
+        return;
+      }
 
       const tasksWithLocation = (data || []).map(task => ({
         ...task,
         location_required: task.location_required || (task.task_locations && task.task_locations.length > 0),
-        location_latitude: task.location_latitude || task.task_locations?.[0]?.required_latitude,
-        location_longitude: task.location_longitude || task.task_locations?.[0]?.required_longitude,
-        location_radius_meters: task.location_radius_meters || task.task_locations?.[0]?.required_radius_meters || 100,
+        location_latitude: task.location_latitude || task.task_locations?.[0]?.latitude,
+        location_longitude: task.location_longitude || task.task_locations?.[0]?.longitude,
+        location_radius_meters: task.location_radius_meters || task.task_locations?.[0]?.radius_meters || 100,
         auto_check_in: task.auto_check_in || false,
         auto_check_out: task.auto_check_out || false,
       }));
@@ -119,9 +169,15 @@ export default function LocationTaskInterface() {
       if (currentLocation) {
         updateTaskDistances(tasksWithLocation);
       }
-    } catch (error) {
-      console.error('Error fetching tasks:', error);
-      toast.error('Failed to fetch tasks');
+    } catch (error: any) {
+      console.error('Unexpected error in fetchTasks:', {
+        message: error.message,
+        name: error.name,
+        code: error.code,
+        stack: error.stack,
+        userFromContext: !!user
+      });
+      toast.error('An unexpected error occurred while fetching tasks');
     }
   };
 

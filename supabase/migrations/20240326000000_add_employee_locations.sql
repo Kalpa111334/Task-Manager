@@ -43,9 +43,9 @@ CREATE POLICY "Employees can view their own locations"
 
 -- Allow admins to view all locations
 CREATE POLICY "Admins can view all locations"
-    ON employee_locations FOR SELECT
-    TO authenticated
-    USING (
+ON employee_locations FOR SELECT
+TO authenticated
+USING (
         EXISTS (
             SELECT 1 FROM users
             WHERE users.id = auth.uid()
@@ -137,4 +137,4 @@ BEGIN
         )
     );
 END;
-$$; 
+$$;

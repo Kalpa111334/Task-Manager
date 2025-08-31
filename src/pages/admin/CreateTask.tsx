@@ -7,6 +7,15 @@ import { supabase } from '../../lib/supabase';
 import { GeofencingService } from '../../services/GeofencingService';
 import toast from 'react-hot-toast';
 
+interface TaskLocation {
+  geofence_id?: string;
+  latitude?: number;
+  longitude?: number;
+  radius_meters: number;
+  arrival_required: boolean;
+  departure_required: boolean;
+}
+
 export default function CreateTask() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
@@ -17,6 +26,23 @@ export default function CreateTask() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
+
+      // Validate locations if required
+      if (formData.location_required && (!formData.locations || formData.locations.length === 0)) {
+        throw new Error('At least one location is required');
+      }
+
+      if (formData.location_required && formData.locations) {
+        const invalidLocations = formData.locations.filter((loc: TaskLocation) => {
+          if (!loc) return true;
+          // Location must either have a geofence_id OR both latitude and longitude
+          return !loc.geofence_id && (!loc.latitude || !loc.longitude);
+        });
+
+        if (invalidLocations.length > 0) {
+          throw new Error('Each location must have either a geofence or valid coordinates');
+        }
+      }
 
       // Create the task
       const { data: task, error: taskError } = await supabase
@@ -30,11 +56,6 @@ export default function CreateTask() {
             due_date: formData.due_date,
             price: formData.price,
             location_required: formData.location_required,
-            location_latitude: formData.location_latitude,
-            location_longitude: formData.location_longitude,
-            location_radius_meters: formData.location_radius_meters,
-            auto_check_in: formData.auto_check_in,
-            auto_check_out: formData.auto_check_out,
             status: 'Not Started',
             created_by: user.id,
             created_at: new Date().toISOString(),
@@ -46,24 +67,41 @@ export default function CreateTask() {
 
       if (taskError) throw taskError;
 
-      // Create task location if location data is provided
-      if (formData.location_data && task) {
-        const { error: locationError } = await supabase
-          .from('task_locations')
-          .insert([
-            {
-              task_id: task.id,
-              ...formData.location_data,
-            },
-          ]);
+      // Create task locations if location is required
+      if (formData.location_required && formData.locations && task) {
+        try {
+          // First, prepare all location data
+          const locationDataArray = formData.locations.map(location => ({
+            task_id: task.id,
+            geofence_id: location.geofence_id || null,
+            latitude: typeof location.latitude === 'number' ? location.latitude : null,
+            longitude: typeof location.longitude === 'number' ? location.longitude : null,
+            radius_meters: location.radius_meters || 100,
+            arrival_required: !!location.arrival_required,
+            departure_required: !!location.departure_required,
+          }));
 
-        if (locationError) {
-          console.error('Error creating task location:', locationError);
-          // Don't fail the entire operation for this
+          // Insert all locations in a single transaction
+          const { error: locationError } = await supabase
+            .from('task_locations')
+            .insert(locationDataArray);
+
+          if (locationError) {
+            // If location save fails, delete the task
+            await supabase.from('tasks').delete().eq('id', task.id);
+            throw locationError;
+          }
+
+          toast.success('Task created successfully with all locations');
+        } catch (locationError: any) {
+          // Clean up the task if location save failed
+          await supabase.from('tasks').delete().eq('id', task.id);
+          throw new Error(locationError.message || 'Failed to save location');
         }
+      } else {
+        toast.success('Task created successfully');
       }
 
-      toast.success('Task created successfully');
       navigate('/admin/tasks');
     } catch (error: any) {
       console.error('Error creating task:', error);
@@ -86,7 +124,7 @@ export default function CreateTask() {
                 <div className="md:col-span-1">
                   <h3 className="text-lg font-medium leading-6 text-gray-900">Task Details</h3>
                   <p className="mt-1 text-sm text-gray-500">
-                    Provide the details for the new task, including location requirements if needed.
+                    Provide the details for the new task. You can add multiple locations where this task can be performed.
                   </p>
                 </div>
                 <div className="mt-5 md:mt-0 md:col-span-2">
