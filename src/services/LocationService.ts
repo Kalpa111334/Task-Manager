@@ -32,7 +32,7 @@ export class LocationService {
       // Get all employees
       const { data: employees, error: employeesError } = await supabase
         .from('users')
-        .select('id, full_name, email')
+        .select('id, full_name, email, avatar_url')
         .eq('role', 'employee');
 
       if (employeesError || !employees || employees.length === 0) {
